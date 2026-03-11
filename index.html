@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<!--
+   ______                            __
+  / ____/___  ____ ___  ____  __  __/ /____  _____
+ / /   / __ \/ __ `__ \/ __ \/ / / / __/ _ \/ ___/
+/ /___/ /_/ / / / / / / /_/ / /_/ / /_/  __/ /
+\____/\____/_/ /_/ /_/ .___/\__,_/\__/\___/_/
+                    /_/
+        Created with Perplexity Computer
+        https://www.perplexity.ai/computer
+-->
+<meta name="generator" content="Perplexity Computer">
+<meta name="author" content="Perplexity Computer">
+<meta property="og:see_also" content="https://www.perplexity.ai/computer">
+<link rel="author" href="https://www.perplexity.ai/computer">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChronoWeave</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div id="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <button class="btn-new" id="newSessionBtn"><i data-lucide="plus" style="width:16px;height:16px"></i> New thread</button>
+      </div>
+      <nav class="session-nav" id="sessionNav"></nav>
+      <div class="sidebar-bottom">
+        <a href="https://www.perplexity.ai/computer" target="_blank" rel="noopener noreferrer" class="attr-link">Built with Perplexity Computer</a>
+      </div>
+    </aside>
+
+    <main class="main" id="main">
+      <!-- Landing -->
+      <div class="landing" id="landing">
+        <div class="landing-inner">
+          <svg class="landing-logo" width="48" height="48" viewBox="0 0 48 48" fill="none">
+            <circle cx="24" cy="24" r="20" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+            <circle cx="24" cy="24" r="10" stroke="#6e7bf2" stroke-width="1.5"/>
+            <circle cx="24" cy="24" r="3" fill="#6e7bf2"/>
+            <line x1="24" y1="4" x2="24" y2="14" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+            <line x1="24" y1="34" x2="24" y2="44" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+            <line x1="4" y1="24" x2="14" y2="24" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+            <line x1="34" y1="24" x2="44" y2="24" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+          </svg>
+          <h1 class="landing-title">What would you like to explore?</h1>
+          <p class="landing-sub">Research any topic and ChronoWeave will build an interactive timeline</p>
+          <div class="landing-input-wrap">
+            <input type="text" id="landingInput" placeholder="e.g. History of Artificial Intelligence" autocomplete="off">
+            <button class="btn-submit" id="landingSubmit"><i data-lucide="arrow-right" style="width:18px;height:18px"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Session View -->
+      <div class="session-view hidden" id="sessionView">
+        <header class="topbar">
+          <button class="icon-btn mobile-toggle" id="mobileToggle" aria-label="Menu"><i data-lucide="panel-left" style="width:18px;height:18px"></i></button>
+          <h2 class="topbar-title" id="topbarTitle">Thread</h2>
+          <div class="topbar-actions">
+            <div class="view-switch" id="viewSwitch">
+              <button class="vs-btn active" data-view="linear"><i data-lucide="git-commit-horizontal" style="width:14px;height:14px"></i> Linear</button>
+              <button class="vs-btn" data-view="list"><i data-lucide="list" style="width:14px;height:14px"></i> List</button>
+            </div>
+            <button class="btn-merge" id="mergeBtn" disabled><i data-lucide="git-merge" style="width:14px;height:14px"></i> Merge</button>
+          </div>
+        </header>
+
+        <div class="chips-bar" id="chipsBar"></div>
+
+        <div class="canvas-wrap" id="canvasWrap">
+          <div class="canvas" id="canvas"></div>
+        </div>
+
+        <div class="input-bar">
+          <div class="input-wrap">
+            <input type="text" id="queryInput" placeholder="Research another topic..." autocomplete="off">
+            <button class="btn-submit" id="querySubmit"><i data-lucide="arrow-right" style="width:18px;height:18px"></i></button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-bg hidden" id="modalBg">
+    <div class="modal" role="dialog">
+      <div class="modal-head"><h3 id="mTitle"></h3><button class="icon-btn" id="mClose" aria-label="Close"><i data-lucide="x" style="width:16px;height:16px"></i></button></div>
+      <div class="modal-body">
+        <div class="m-dates" id="mDates"></div>
+        <div class="m-desc" id="mDesc"></div>
+        <div class="m-sources" id="mSources"></div>
+        <div class="m-tags" id="mTags"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loader -->
+  <div class="loader-bg hidden" id="loaderBg">
+    <div class="loader"><div class="loader-ring"></div><span id="loaderText">Researching...</span></div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
