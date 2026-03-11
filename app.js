@@ -9,11 +9,15 @@ const S = {
   timelines: [],
   selected: new Set(),
   view: "linear",
+  zoom: 1.0,
+  minImportance: 0,
 };
 
 const COLORS = ["#6e7bf2","#f87171","#4ade80","#fb923c","#a78bfa","#22d3ee","#e8af34","#f472b6","#38bdf8","#a3e635"];
 let colorIdx = 0;
 function nextColor() { return COLORS[colorIdx++ % COLORS.length]; }
+
+const ZOOM_STEPS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 5.0];
 
 // ── DOM Refs ───────────────────────────────────────────────────────────────
 const _$ = s => document.querySelector(s);
@@ -30,6 +34,9 @@ const modalBg = _$("#modalBg");
 const viewSwitch = _$("#viewSwitch");
 const mergeBtn = _$("#mergeBtn");
 const sidebar = _$("#sidebar");
+const zoomLevelEl = _$("#zoomLevel");
+const densityDropdown = _$("#densityDropdown");
+const densityLabel = _$("#densityLabel");
 
 // ── API Helper ─────────────────────────────────────────────────────────────
 async function api(path, opts = {}) {
@@ -136,13 +143,52 @@ async function doMerge() {
   finally { hideLoader(); }
 }
 
+// ── Zoom ───────────────────────────────────────────────────────────────────
+function setZoom(z) {
+  S.zoom = Math.max(0.25, Math.min(5, z));
+  zoomLevelEl.textContent = Math.round(S.zoom * 100) + "%";
+  renderView();
+}
+
+function zoomIn() {
+  const next = ZOOM_STEPS.find(s => s > S.zoom + 0.01);
+  setZoom(next || S.zoom);
+}
+
+function zoomOut() {
+  const prev = [...ZOOM_STEPS].reverse().find(s => s < S.zoom - 0.01);
+  setZoom(prev || S.zoom);
+}
+
+function zoomFit() { setZoom(1.0); }
+
+// ── Density ────────────────────────────────────────────────────────────────
+function setMinImportance(min) {
+  S.minImportance = min;
+  densityDropdown.querySelectorAll(".dd-item").forEach(b => {
+    b.classList.toggle("active", parseInt(b.dataset.min) === min);
+  });
+  const labels = {0:"All", 3:"3+", 5:"5+", 7:"7+", 9:"9+"};
+  densityLabel.textContent = labels[min] || "All";
+  renderView();
+}
+
 // ── Render View ────────────────────────────────────────────────────────────
 function renderView() {
   canvas.innerHTML = "";
   if (!S.timelines.length) { canvas.innerHTML = '<div class="empty-note">Research a topic below to create your first timeline</div>'; return; }
   const allEvts = gatherEvents();
-  if (S.view === "list") renderListView(allEvts);
-  else renderLinearView(allEvts);
+  // Filter by importance
+  const filtered = S.minImportance > 0
+    ? allEvts.filter(e => (e.importance || 5) >= S.minImportance)
+    : allEvts;
+
+  // Count hidden events for cluster display
+  const hiddenCount = allEvts.length - filtered.length;
+
+  if (S.view === "list") renderListView(filtered, hiddenCount);
+  else if (S.view === "horizontal") renderHorizontalView(filtered, hiddenCount, allEvts);
+  else renderLinearView(filtered, hiddenCount, allEvts);
 }
 
 function gatherEvents() {
@@ -155,9 +201,19 @@ function gatherEvents() {
 }
 
 // ── LIST VIEW ──────────────────────────────────────────────────────────────
-function renderListView(events) {
+function renderListView(events, hiddenCount) {
   const wrap = document.createElement("div");
   wrap.className = "list-view";
+
+  if (hiddenCount > 0) {
+    const note = document.createElement("div");
+    note.className = "empty-note";
+    note.style.padding = "12px 0";
+    note.style.fontSize = "12px";
+    note.textContent = `${hiddenCount} lower-importance event${hiddenCount > 1 ? "s" : ""} hidden by filter`;
+    wrap.appendChild(note);
+  }
+
   events.forEach((evt,i) => {
     const el = document.createElement("div");
     el.className = "list-ev";
@@ -166,7 +222,6 @@ function renderListView(events) {
     const imp = evt.importance||5;
     const impOp = 0.2 + (imp/10)*0.8;
 
-    // Duration bar in the gutter for duration events
     let durBar = "";
     if (evt.end_date && evt.end_date !== evt.start_date) {
       durBar = `<div class="list-dur" style="background:${col};height:calc(100% - 18px)"></div>`;
@@ -193,14 +248,13 @@ function renderListView(events) {
   canvas.appendChild(wrap);
 }
 
-// ── LINEAR (PROPORTIONAL) VIEW ─────────────────────────────────────────────
-function renderLinearView(events) {
+// ── LINEAR (VERTICAL PROPORTIONAL) VIEW ────────────────────────────────────
+function renderLinearView(events, hiddenCount, allEvts) {
   if (!events.length) { canvas.innerHTML = '<div class="empty-note">No events to display</div>'; return; }
 
   const wrap = document.createElement("div");
   wrap.className = "linear-view";
 
-  // Parse dates to timestamps
   const parsed = events.map(e => ({
     ...e,
     _start: parseDate(e.start_date),
@@ -213,49 +267,44 @@ function renderLinearView(events) {
   const maxTs = Math.max(...parsed.map(e => e._end || e._start));
   const span = maxTs - minTs || 1;
 
-  // Scale: pixels per millisecond — target ~60px per year minimum, up to 1500px total
-  const AXIS_LEFT = 110; // px left for year labels
-  const CARD_AREA_LEFT = AXIS_LEFT + 16; // after axis line + gap
+  const AXIS_LEFT = 110;
+  const CARD_AREA_LEFT = AXIS_LEFT + 16;
   const MIN_HEIGHT = 800;
-  const PX_PER_YEAR = 70;
+  const PX_PER_YEAR = 70 * S.zoom;
   const totalYears = span / (365.25*24*3600*1000);
   const totalHeight = Math.max(MIN_HEIGHT, totalYears * PX_PER_YEAR + 120);
-  const pxPerMs = (totalHeight - 80) / span; // leave 40px top/bottom padding
+  const pxPerMs = (totalHeight - 80) / span;
 
   function yPos(ts) { return 40 + (ts - minTs) * pxPerMs; }
 
   wrap.style.height = totalHeight + "px";
 
-  // Axis line
+  // Axis
   const axis = document.createElement("div");
   axis.className = "linear-axis";
   axis.style.left = AXIS_LEFT + "px";
   wrap.appendChild(axis);
 
-  // Year labels + ticks
+  // Year labels
   const minYear = new Date(minTs).getFullYear();
   const maxYear = new Date(maxTs).getFullYear();
-  for (let y = minYear; y <= maxYear; y++) {
+  const yearStep = getYearStep(maxYear - minYear, S.zoom);
+  for (let y = minYear; y <= maxYear; y += yearStep) {
     const ts = new Date(y, 0, 1).getTime();
     if (ts < minTs || ts > maxTs) continue;
     const top = yPos(ts);
-
     const lbl = document.createElement("div");
     lbl.className = "linear-year-label";
     lbl.style.top = top + "px";
     lbl.textContent = y;
     wrap.appendChild(lbl);
-
     const tick = document.createElement("div");
     tick.className = "linear-year-tick";
     tick.style.top = top + "px";
     wrap.appendChild(tick);
   }
 
-  // ── Lane assignment for overlapping events ──────────────────────────────
-  // Each event occupies vertical space [yStart, yEnd].
-  // Point events get a min height of 48px.
-  // We assign lanes so that overlapping events sit side-by-side.
+  // Lane assignment
   const MIN_EVENT_H = 48;
   const LANE_WIDTH = 260;
   const LANE_GAP = 8;
@@ -266,15 +315,13 @@ function renderLinearView(events) {
     return { evt: e, yStart, yEnd, lane: 0, idx: i };
   });
 
-  // Sort by start position, then by duration (longer first for better packing)
   items.sort((a, b) => a.yStart - b.yStart || (b.yEnd - b.yStart) - (a.yEnd - a.yStart));
 
-  // Greedy lane assignment
-  const laneEnds = []; // laneEnds[l] = the y position where lane l becomes free
+  const laneEnds = [];
   items.forEach(item => {
     let placed = false;
     for (let l = 0; l < laneEnds.length; l++) {
-      if (item.yStart >= laneEnds[l] + 4) { // 4px gap between events in same lane
+      if (item.yStart >= laneEnds[l] + 4) {
         item.lane = l;
         laneEnds[l] = item.yEnd;
         placed = true;
@@ -288,6 +335,22 @@ function renderLinearView(events) {
   });
 
   const maxLane = laneEnds.length;
+
+  // Cluster hidden events
+  if (hiddenCount > 0) {
+    const hiddenEvts = allEvts.filter(e => (e.importance || 5) < S.minImportance);
+    const clusters = buildClusters(hiddenEvts, parsed, yPos, "vertical");
+    clusters.forEach(cl => {
+      const pill = document.createElement("div");
+      pill.className = "cluster-pill";
+      pill.style.top = cl.y + "px";
+      pill.style.left = (CARD_AREA_LEFT + maxLane * (LANE_WIDTH + LANE_GAP) + 12) + "px";
+      pill.innerHTML = `<span class="cluster-count">${cl.count}</span>${cl.label}`;
+      pill.title = cl.titles.join("\n");
+      pill.addEventListener("click", () => setMinImportance(0));
+      wrap.appendChild(pill);
+    });
+  }
 
   // Render events
   items.forEach((item, i) => {
@@ -306,7 +369,6 @@ function renderLinearView(events) {
     el.style.animationDelay = `${Math.min(i * 25, 500)}ms`;
 
     if (isDuration) {
-      // Bar style for duration events
       const h = Math.max(yEnd - yStart, 28);
       el.style.height = h + "px";
       el.innerHTML = `
@@ -319,7 +381,6 @@ function renderLinearView(events) {
       `;
       el.querySelector(".linear-bar").addEventListener("click", () => openModal(evt));
     } else {
-      // Card style for point events
       el.innerHTML = `
         <div class="linear-point">
           <div class="linear-point-dot" style="background:${col}"></div>
@@ -338,29 +399,300 @@ function renderLinearView(events) {
     wrap.appendChild(el);
   });
 
-  // Extend wrap height if events overflow
   const maxBottom = Math.max(...items.map(it => it.yEnd)) + 60;
   if (maxBottom > totalHeight) wrap.style.height = maxBottom + "px";
-
-  // Set min-width so horizontal scroll works
   const maxRight = CARD_AREA_LEFT + maxLane * (LANE_WIDTH + LANE_GAP) + 20;
   wrap.style.minWidth = maxRight + "px";
 
   canvas.appendChild(wrap);
 }
 
+// ── HORIZONTAL (PROPORTIONAL) VIEW ─────────────────────────────────────────
+function renderHorizontalView(events, hiddenCount, allEvts) {
+  if (!events.length) { canvas.innerHTML = '<div class="empty-note">No events to display</div>'; return; }
+
+  const wrap = document.createElement("div");
+  wrap.className = "horiz-view";
+
+  const parsed = events.map(e => ({
+    ...e,
+    _start: parseDate(e.start_date),
+    _end: e.end_date ? parseDate(e.end_date) : null,
+  })).filter(e => e._start);
+
+  if (!parsed.length) { canvas.innerHTML = '<div class="empty-note">No valid dates found</div>'; return; }
+
+  const minTs = Math.min(...parsed.map(e => e._start));
+  const maxTs = Math.max(...parsed.map(e => e._end || e._start));
+  const span = maxTs - minTs || 1;
+
+  // Sizing: proportional horizontal layout
+  const PAD_LEFT = 60;
+  const PAD_RIGHT = 60;
+  const PX_PER_YEAR_H = 150 * S.zoom;
+  const totalYears = span / (365.25*24*3600*1000);
+  const contentWidth = Math.max(800, totalYears * PX_PER_YEAR_H);
+  const totalWidth = PAD_LEFT + contentWidth + PAD_RIGHT;
+  const pxPerMs = contentWidth / span;
+
+  function xPos(ts) { return PAD_LEFT + (ts - minTs) * pxPerMs; }
+
+  // Axis height: center of view
+  const CARD_HEIGHT = 80;
+  const LANE_HEIGHT = CARD_HEIGHT + 12;
+  const CONNECTOR_GAP = 16;
+  const AXIS_Y_OFFSET = 0; // relative to CSS top:50%
+
+  // ── Lane assignment: alternating above/below ──
+  // Sort by start position
+  const items = parsed.map((e, idx) => {
+    const xStart = xPos(e._start);
+    const xEnd = e._end ? Math.max(xPos(e._end), xStart + 100) : xStart + 200;
+    return { evt: e, xStart, xEnd, lane: 0, side: "above", idx };
+  });
+  items.sort((a, b) => a.xStart - b.xStart);
+
+  // Greedy lane assignment — above lanes (0,1,2...) and below lanes (0,1,2...)
+  const aboveLaneEnds = [];
+  const belowLaneEnds = [];
+
+  items.forEach(item => {
+    // Try above first, then below, alternating based on which has less vertical stacking
+    const aboveLane = findFreeLane(aboveLaneEnds, item.xStart, item.xEnd);
+    const belowLane = findFreeLane(belowLaneEnds, item.xStart, item.xEnd);
+
+    // Pick whichever side has a lower lane available
+    if (aboveLane <= belowLane) {
+      item.side = "above";
+      item.lane = aboveLane;
+      if (aboveLane >= aboveLaneEnds.length) aboveLaneEnds.push(item.xEnd + 8);
+      else aboveLaneEnds[aboveLane] = item.xEnd + 8;
+    } else {
+      item.side = "below";
+      item.lane = belowLane;
+      if (belowLane >= belowLaneEnds.length) belowLaneEnds.push(item.xEnd + 8);
+      else belowLaneEnds[belowLane] = item.xEnd + 8;
+    }
+  });
+
+  const maxAboveLanes = aboveLaneEnds.length || 1;
+  const maxBelowLanes = belowLaneEnds.length || 1;
+  const halfHeight = Math.max(maxAboveLanes, maxBelowLanes) * LANE_HEIGHT + CONNECTOR_GAP + 40;
+  const totalH = halfHeight * 2 + 40;
+  const axisY = halfHeight + 20; // vertical center
+
+  wrap.style.height = totalH + "px";
+  wrap.style.minWidth = totalWidth + "px";
+
+  // Axis line
+  const axis = document.createElement("div");
+  axis.className = "horiz-axis";
+  axis.style.top = axisY + "px";
+  axis.style.transform = "none";
+  wrap.appendChild(axis);
+
+  // Year labels along axis
+  const minYear = new Date(minTs).getFullYear();
+  const maxYear = new Date(maxTs).getFullYear();
+  const yearStep = getYearStep(maxYear - minYear, S.zoom);
+  for (let y = minYear; y <= maxYear; y += yearStep) {
+    const ts = new Date(y, 0, 1).getTime();
+    if (ts < minTs || ts > maxTs) continue;
+    const x = xPos(ts);
+    const lbl = document.createElement("div");
+    lbl.className = "horiz-year-label";
+    lbl.style.left = x + "px";
+    lbl.style.top = (axisY + 8) + "px";
+    lbl.style.transform = "translateX(-50%)";
+    lbl.textContent = y;
+    wrap.appendChild(lbl);
+    const tick = document.createElement("div");
+    tick.className = "horiz-year-tick";
+    tick.style.left = x + "px";
+    tick.style.top = (axisY - 6) + "px";
+    tick.style.transform = "none";
+    wrap.appendChild(tick);
+  }
+
+  // Cluster hidden events
+  if (hiddenCount > 0) {
+    const hiddenEvts = allEvts.filter(e => (e.importance || 5) < S.minImportance);
+    const clusters = buildClusters(hiddenEvts, parsed, xPos, "horizontal");
+    clusters.forEach(cl => {
+      const pill = document.createElement("div");
+      pill.className = "cluster-pill";
+      pill.style.left = cl.x + "px";
+      pill.style.top = (axisY + 28) + "px";
+      pill.innerHTML = `<span class="cluster-count">${cl.count}</span>${cl.label}`;
+      pill.title = cl.titles.join("\n");
+      pill.addEventListener("click", () => setMinImportance(0));
+      wrap.appendChild(pill);
+    });
+  }
+
+  // Render events
+  items.forEach((item, i) => {
+    const { evt, xStart, xEnd, lane, side } = item;
+    const isDuration = evt._end && evt._end !== evt._start;
+    const col = evtColor(evt);
+    const imp = evt.importance || 5;
+    const impOp = 0.2 + (imp/10) * 0.8;
+
+    const el = document.createElement("div");
+    el.className = `horiz-ev ${side}`;
+    el.style.animationDelay = `${Math.min(i * 20, 400)}ms`;
+
+    // Card dimensions
+    const cardW = isDuration ? Math.max(xEnd - xStart, 100) : 200;
+
+    // Position
+    el.style.left = xStart + "px";
+    el.style.width = cardW + "px";
+
+    const laneOffset = CONNECTOR_GAP + lane * LANE_HEIGHT;
+
+    if (side === "above") {
+      el.style.top = (axisY - laneOffset - CARD_HEIGHT) + "px";
+    } else {
+      el.style.top = (axisY + laneOffset + 4) + "px";
+    }
+
+    // Connector line
+    const connector = document.createElement("div");
+    connector.className = "horiz-connector";
+    connector.style.background = hexAlpha(col, 0.3);
+    if (side === "above") {
+      connector.style.left = "10px";
+      connector.style.bottom = "-" + (laneOffset) + "px";
+      connector.style.height = laneOffset + "px";
+    } else {
+      connector.style.left = "10px";
+      connector.style.top = "-" + (laneOffset + 4) + "px";
+      connector.style.height = (laneOffset + 4) + "px";
+    }
+    el.appendChild(connector);
+
+    // Dot on axis
+    const dot = document.createElement("div");
+    dot.className = "horiz-dot";
+    dot.style.background = col;
+    if (side === "above") {
+      dot.style.top = "auto";
+      dot.style.bottom = "-" + (laneOffset + 4) + "px";
+      dot.style.left = "10px";
+      dot.style.transform = "translate(-50%, 50%)";
+    } else {
+      dot.style.top = "-" + (laneOffset + 8) + "px";
+      dot.style.left = "10px";
+      dot.style.transform = "translate(-50%, -50%)";
+    }
+    el.appendChild(dot);
+
+    // Card content
+    if (isDuration) {
+      const bar = document.createElement("div");
+      bar.className = "horiz-bar";
+      bar.style.background = hexAlpha(col, 0.2);
+      bar.style.height = CARD_HEIGHT + "px";
+      bar.innerHTML = `
+        <div class="list-imp" style="background:${col};opacity:${impOp}"></div>
+        <span class="linear-bar-title" style="color:${col}">${esc(evt.title)}</span>
+        <span class="linear-bar-dates">${fmtDateRange(evt)}</span>
+        ${sourceDotsSmall(evt)}
+      `;
+      bar.addEventListener("click", () => openModal(evt));
+      el.appendChild(bar);
+    } else {
+      const card = document.createElement("div");
+      card.className = "horiz-card";
+      card.style.width = "100%";
+      card.innerHTML = `
+        <div class="list-imp" style="background:${col};opacity:${impOp}"></div>
+        <div class="list-date">${fmtDateRange(evt)}</div>
+        <div class="list-title" style="font-size:12px">${esc(evt.title)}</div>
+        <div class="list-desc" style="font-size:11px;-webkit-line-clamp:2">${esc(evt.description||"")}</div>
+      `;
+      card.addEventListener("click", () => openModal(evt));
+      el.appendChild(card);
+    }
+
+    wrap.appendChild(el);
+  });
+
+  canvas.appendChild(wrap);
+}
+
+// ── Helper: find free lane ─────────────────────────────────────────────────
+function findFreeLane(laneEnds, start, end) {
+  for (let l = 0; l < laneEnds.length; l++) {
+    if (start >= laneEnds[l]) return l;
+  }
+  return laneEnds.length;
+}
+
+// ── Helper: year step for labels ───────────────────────────────────────────
+function getYearStep(yearRange, zoom) {
+  const effectiveRange = yearRange / zoom;
+  if (effectiveRange > 200) return 50;
+  if (effectiveRange > 100) return 20;
+  if (effectiveRange > 50) return 10;
+  if (effectiveRange > 20) return 5;
+  if (effectiveRange > 10) return 2;
+  return 1;
+}
+
+// ── Helper: build clusters of hidden events ────────────────────────────────
+function buildClusters(hiddenEvts, visibleParsed, posFunc, axis) {
+  if (!hiddenEvts.length) return [];
+
+  const hiddenParsed = hiddenEvts
+    .map(e => ({ ...e, _ts: parseDate(e.start_date) }))
+    .filter(e => e._ts)
+    .sort((a,b) => a._ts - b._ts);
+
+  if (!hiddenParsed.length) return [];
+
+  // Group nearby hidden events into clusters
+  const clusters = [];
+  let current = { events: [hiddenParsed[0]], ts: hiddenParsed[0]._ts };
+
+  const clusterThreshold = axis === "horizontal" ? 100 / (S.zoom || 1) : 60 / (S.zoom || 1);
+
+  for (let i = 1; i < hiddenParsed.length; i++) {
+    const e = hiddenParsed[i];
+    const pos = posFunc(e._ts);
+    const prevPos = posFunc(current.events[current.events.length - 1]._ts);
+    if (Math.abs(pos - prevPos) < clusterThreshold) {
+      current.events.push(e);
+    } else {
+      clusters.push(current);
+      current = { events: [e], ts: e._ts };
+    }
+  }
+  clusters.push(current);
+
+  return clusters.map(cl => {
+    const midTs = cl.events[Math.floor(cl.events.length / 2)]._ts;
+    const pos = posFunc(midTs);
+    return {
+      count: cl.events.length,
+      label: cl.events.length === 1 ? "hidden event" : "hidden events",
+      titles: cl.events.map(e => `[${e.importance||5}] ${e.title}`),
+      x: axis === "horizontal" ? pos : 0,
+      y: axis === "vertical" ? pos : 0,
+    };
+  });
+}
+
 // ── Date Parsing ───────────────────────────────────────────────────────────
 function parseDate(s) {
   if (!s) return null;
-  // YYYY
   if (/^\d{4}$/.test(s)) return new Date(parseInt(s), 0, 1).getTime();
-  // YYYY-MM
   if (/^\d{4}-\d{2}$/.test(s)) { const [y,m] = s.split("-"); return new Date(parseInt(y), parseInt(m)-1, 1).getTime(); }
-  // YYYY-MM-DD
   return new Date(s + "T00:00:00").getTime();
 }
 
-function fmtDate(s, prec) {
+function fmtDate(s) {
   if (!s) return "?";
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   if (/^\d{4}$/.test(s)) return s;
@@ -372,9 +704,9 @@ function fmtDate(s, prec) {
 }
 
 function fmtDateRange(evt) {
-  const start = fmtDate(evt.start_date, evt.date_precision);
+  const start = fmtDate(evt.start_date);
   if (!evt.end_date || evt.end_date === evt.start_date) return start;
-  const end = fmtDate(evt.end_date, evt.date_precision);
+  const end = fmtDate(evt.end_date);
   return `${start} → ${end}`;
 }
 
@@ -480,6 +812,31 @@ viewSwitch.querySelectorAll(".vs-btn").forEach(b => b.addEventListener("click", 
   S.view = b.dataset.view;
   renderView();
 }));
+
+// Zoom controls
+_$("#zoomIn").addEventListener("click", zoomIn);
+_$("#zoomOut").addEventListener("click", zoomOut);
+_$("#zoomFit").addEventListener("click", zoomFit);
+
+// Mouse wheel zoom on canvas
+canvasWrap.addEventListener("wheel", e => {
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault();
+    if (e.deltaY < 0) zoomIn();
+    else zoomOut();
+  }
+}, { passive: false });
+
+// Density dropdown
+_$("#densityBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  densityDropdown.classList.toggle("hidden");
+});
+densityDropdown.querySelectorAll(".dd-item").forEach(b => b.addEventListener("click", () => {
+  setMinImportance(parseInt(b.dataset.min));
+  densityDropdown.classList.add("hidden");
+}));
+document.addEventListener("click", () => densityDropdown.classList.add("hidden"));
 
 // ── Init ───────────────────────────────────────────────────────────────────
 lucide.createIcons();

@@ -65,8 +65,25 @@
           <h2 class="topbar-title" id="topbarTitle">Thread</h2>
           <div class="topbar-actions">
             <div class="view-switch" id="viewSwitch">
-              <button class="vs-btn active" data-view="linear"><i data-lucide="git-commit-horizontal" style="width:14px;height:14px"></i> Linear</button>
+              <button class="vs-btn active" data-view="linear"><i data-lucide="arrow-down" style="width:14px;height:14px"></i> Vertical</button>
+              <button class="vs-btn" data-view="horizontal"><i data-lucide="arrow-right" style="width:14px;height:14px"></i> Horizontal</button>
               <button class="vs-btn" data-view="list"><i data-lucide="list" style="width:14px;height:14px"></i> List</button>
+            </div>
+            <div class="zoom-controls" id="zoomControls">
+              <button class="zoom-btn" id="zoomOut" aria-label="Zoom out"><i data-lucide="minus" style="width:14px;height:14px"></i></button>
+              <span class="zoom-level" id="zoomLevel">100%</span>
+              <button class="zoom-btn" id="zoomIn" aria-label="Zoom in"><i data-lucide="plus" style="width:14px;height:14px"></i></button>
+              <button class="zoom-btn" id="zoomFit" aria-label="Fit to view"><i data-lucide="maximize-2" style="width:14px;height:14px"></i></button>
+            </div>
+            <div class="density-control" id="densityControl">
+              <button class="density-btn" id="densityBtn" aria-label="Density filter"><i data-lucide="filter" style="width:14px;height:14px"></i> <span id="densityLabel">All</span></button>
+              <div class="density-dropdown hidden" id="densityDropdown">
+                <button class="dd-item active" data-min="0">All events</button>
+                <button class="dd-item" data-min="3">Importance 3+</button>
+                <button class="dd-item" data-min="5">Importance 5+</button>
+                <button class="dd-item" data-min="7">Major only (7+)</button>
+                <button class="dd-item" data-min="9">Critical only (9+)</button>
+              </div>
             </div>
             <button class="btn-merge" id="mergeBtn" disabled><i data-lucide="git-merge" style="width:14px;height:14px"></i> Merge</button>
           </div>
