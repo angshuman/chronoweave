@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="midnight">
 <head>
 <!--
    ______                            __
@@ -32,7 +32,15 @@
       </div>
       <nav class="session-nav" id="sessionNav"></nav>
       <div class="sidebar-bottom">
-        <a href="https://www.perplexity.ai/computer" target="_blank" rel="noopener noreferrer" class="attr-link">Built with Perplexity Computer</a>
+        <div class="theme-picker">
+          <span class="theme-picker-label">Theme</span>
+          <button class="theme-dot active" data-theme="midnight" aria-label="Midnight theme"></button>
+          <button class="theme-dot" data-theme="slate" aria-label="Slate theme"></button>
+          <button class="theme-dot" data-theme="ember" aria-label="Ember theme"></button>
+          <button class="theme-dot" data-theme="forest" aria-label="Forest theme"></button>
+          <button class="theme-dot" data-theme="light" aria-label="Light theme"></button>
+        </div>
+        <a href="https://www.perplexity.ai/computer" target="_blank" rel="noopener noreferrer" class="attr-link" style="margin-top:10px">Built with Perplexity Computer</a>
       </div>
     </aside>
 
@@ -112,6 +120,7 @@
       <div class="modal-body">
         <div class="m-dates" id="mDates"></div>
         <div class="m-desc" id="mDesc"></div>
+        <div class="m-imp-bar" id="mImpBar"><span class="m-imp-label">Importance</span><span class="m-imp-pips" id="mImpPips"></span></div>
         <div class="m-sources" id="mSources"></div>
         <div class="m-tags" id="mTags"></div>
       </div>

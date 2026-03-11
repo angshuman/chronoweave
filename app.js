@@ -11,13 +11,16 @@ const S = {
   view: "linear",
   zoom: 1.0,
   minImportance: 0,
+  theme: "midnight",
 };
 
 const COLORS = ["#6e7bf2","#f87171","#4ade80","#fb923c","#a78bfa","#22d3ee","#e8af34","#f472b6","#38bdf8","#a3e635"];
 let colorIdx = 0;
 function nextColor() { return COLORS[colorIdx++ % COLORS.length]; }
 
-const ZOOM_STEPS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 5.0];
+const ZOOM_STEPS = [0.15, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 5.0];
+
+const GAP_BREAK_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 4l6 4-6 4"/><path d="M8 4l6 4-6 4"/></svg>';
 
 // ── DOM Refs ───────────────────────────────────────────────────────────────
 const _$ = s => document.querySelector(s);
@@ -46,6 +49,30 @@ async function api(path, opts = {}) {
 }
 function showLoader(t) { loaderText.textContent = t; loaderBg.classList.remove("hidden"); }
 function hideLoader() { loaderBg.classList.add("hidden"); }
+
+// ── Storage helpers (safe in sandboxed iframes) ───────────────────────────
+const _LS = (() => { try { return window["local"+"Storage"]; } catch { return null; } })();
+function storeSet(k, v) { try { if (_LS) _LS.setItem(k, v); } catch { /* sandboxed */ } }
+function storeGet(k) { try { return _LS ? _LS.getItem(k) : null; } catch { return null; } }
+
+// ── Theme System ───────────────────────────────────────────────────────────
+function setTheme(name) {
+  S.theme = name;
+  document.documentElement.setAttribute("data-theme", name);
+  document.querySelectorAll(".theme-dot").forEach(d => {
+    d.classList.toggle("active", d.dataset.theme === name);
+  });
+  storeSet("chronoweave-theme", name);
+}
+
+function initTheme() {
+  const saved = storeGet("chronoweave-theme");
+  setTheme(saved || "midnight");
+}
+
+document.querySelectorAll(".theme-dot").forEach(dot => {
+  dot.addEventListener("click", () => setTheme(dot.dataset.theme));
+});
 
 // ── Sessions ───────────────────────────────────────────────────────────────
 async function loadSessions() { S.sessions = await api("/api/sessions"); renderSessions(); }
@@ -145,7 +172,7 @@ async function doMerge() {
 
 // ── Zoom ───────────────────────────────────────────────────────────────────
 function setZoom(z) {
-  S.zoom = Math.max(0.25, Math.min(5, z));
+  S.zoom = Math.max(0.15, Math.min(5, z));
   zoomLevelEl.textContent = Math.round(S.zoom * 100) + "%";
   renderView();
 }
@@ -173,17 +200,155 @@ function setMinImportance(min) {
   renderView();
 }
 
+// ── Importance Scaling Helpers ─────────────────────────────────────────────
+// All importance-based sizing/styling is calculated here.
+// imp = 1..10
+function impScale(imp) {
+  const t = (imp - 1) / 9; // 0..1
+  return {
+    // Card padding scales from 6px to 14px
+    cardPad: Math.round(6 + t * 8),
+    // Title font-size: 11px to 16px
+    titleSize: Math.round(11 + t * 5),
+    // Desc font-size: 10px to 14px
+    descSize: Math.round(10 + t * 4),
+    // Dot size: 7px to 14px
+    dotSize: Math.round(7 + t * 7),
+    // Opacity: 0.45 to 1.0
+    opacity: +(0.45 + t * 0.55).toFixed(2),
+    // Font weight: 500 for low, 600 mid, 700 high
+    titleWeight: t < 0.4 ? 500 : (t < 0.7 ? 600 : 700),
+    // Glow: only for imp >= 7
+    glow: imp >= 7,
+    // Bar title size: 11px to 14px
+    barTitleSize: Math.round(11 + t * 3),
+  };
+}
+
+// ── Gap Detection ──────────────────────────────────────────────────────────
+// Returns array of {afterIdx, startTs, endTs, label} for gaps to crop
+function detectGaps(parsedEvents) {
+  if (parsedEvents.length < 2) return [];
+
+  // Calculate all gaps between consecutive events
+  const gaps = [];
+  for (let i = 0; i < parsedEvents.length - 1; i++) {
+    const endTs = parsedEvents[i]._end || parsedEvents[i]._start;
+    const nextStart = parsedEvents[i + 1]._start;
+    const gapMs = nextStart - endTs;
+    if (gapMs > 0) {
+      gaps.push({ idx: i, gapMs, startTs: endTs, endTs: nextStart });
+    }
+  }
+
+  if (gaps.length < 2) return [];
+
+  // Find median gap
+  const sorted = [...gaps].sort((a, b) => a.gapMs - b.gapMs);
+  const median = sorted[Math.floor(sorted.length / 2)].gapMs;
+
+  // Gaps > 3x median are "large"
+  const threshold = median * 3;
+  // Also require at least 1 year gap to avoid cropping short timelines
+  const minGap = 365.25 * 24 * 3600 * 1000;
+
+  return gaps
+    .filter(g => g.gapMs > threshold && g.gapMs > minGap)
+    .map(g => {
+      const years = g.gapMs / (365.25 * 24 * 3600 * 1000);
+      let label;
+      if (years >= 1) {
+        label = `${Math.round(years)} year${Math.round(years) !== 1 ? "s" : ""} skipped`;
+      } else {
+        const months = Math.round(years * 12);
+        label = `${months} month${months !== 1 ? "s" : ""} skipped`;
+      }
+      return { afterIdx: g.idx, startTs: g.startTs, endTs: g.endTs, gapMs: g.gapMs, label };
+    });
+}
+
+// Build a position mapping that compresses gaps into fixed-size breaks
+// Returns { posFunc(ts), totalSize, gapBreaks: [{pos, label}] }
+function buildGapCroppedMapping(parsedEvents, gaps, pxPerMsNormal, startOffset) {
+  if (!gaps.length) {
+    const minTs = parsedEvents[0]._start;
+    return {
+      posFunc: ts => startOffset + (ts - minTs) * pxPerMsNormal,
+      totalExtent: (parsedEvents[parsedEvents.length - 1]._end || parsedEvents[parsedEvents.length - 1]._start) - minTs,
+      gapBreaks: [],
+      effectivePxPerMs: pxPerMsNormal,
+    };
+  }
+
+  // Build segments between gaps
+  const GAP_PX = 40; // fixed pixel size for a gap break
+  const minTs = parsedEvents[0]._start;
+  const maxTs = Math.max(...parsedEvents.map(e => e._end || e._start));
+
+  // Sort gaps by time
+  const sortedGaps = [...gaps].sort((a, b) => a.startTs - b.startTs);
+
+  // Build breakpoints: each segment has a real time range mapped to a condensed pixel range
+  const segments = [];
+  let prevEnd = minTs;
+  let accOffset = 0;
+
+  sortedGaps.forEach(g => {
+    // Segment before gap
+    const segSpan = g.startTs - prevEnd;
+    if (segSpan > 0) {
+      segments.push({ fromTs: prevEnd, toTs: g.startTs, pxStart: accOffset, pxSpan: segSpan * pxPerMsNormal });
+      accOffset += segSpan * pxPerMsNormal;
+    }
+    // The gap itself = fixed pixels
+    segments.push({ isGap: true, pxStart: accOffset, label: g.label, fromTs: g.startTs, toTs: g.endTs });
+    accOffset += GAP_PX;
+    prevEnd = g.endTs;
+  });
+
+  // Final segment after last gap
+  const finalSpan = maxTs - prevEnd;
+  if (finalSpan > 0) {
+    segments.push({ fromTs: prevEnd, toTs: maxTs, pxStart: accOffset, pxSpan: finalSpan * pxPerMsNormal });
+    accOffset += finalSpan * pxPerMsNormal;
+  }
+
+  const gapBreaks = segments.filter(s => s.isGap).map(s => ({
+    pos: startOffset + s.pxStart + GAP_PX / 2,
+    label: s.label,
+  }));
+
+  function posFunc(ts) {
+    // Find which segment this ts falls into
+    for (const seg of segments) {
+      if (seg.isGap) {
+        if (ts >= seg.fromTs && ts <= seg.toTs) {
+          return startOffset + seg.pxStart + GAP_PX / 2;
+        }
+        continue;
+      }
+      if (ts >= seg.fromTs && ts <= seg.toTs) {
+        const frac = (ts - seg.fromTs) / (seg.toTs - seg.fromTs || 1);
+        return startOffset + seg.pxStart + frac * seg.pxSpan;
+      }
+    }
+    // Fallback: if ts is beyond all segments
+    const lastSeg = segments[segments.length - 1];
+    if (lastSeg.isGap) return startOffset + lastSeg.pxStart + GAP_PX;
+    return startOffset + lastSeg.pxStart + lastSeg.pxSpan;
+  }
+
+  return { posFunc, totalPx: accOffset, gapBreaks, effectivePxPerMs: pxPerMsNormal };
+}
+
 // ── Render View ────────────────────────────────────────────────────────────
 function renderView() {
   canvas.innerHTML = "";
   if (!S.timelines.length) { canvas.innerHTML = '<div class="empty-note">Research a topic below to create your first timeline</div>'; return; }
   const allEvts = gatherEvents();
-  // Filter by importance
   const filtered = S.minImportance > 0
     ? allEvts.filter(e => (e.importance || 5) >= S.minImportance)
     : allEvts;
-
-  // Count hidden events for cluster display
   const hiddenCount = allEvts.length - filtered.length;
 
   if (S.view === "list") renderListView(filtered, hiddenCount);
@@ -208,33 +373,34 @@ function renderListView(events, hiddenCount) {
   if (hiddenCount > 0) {
     const note = document.createElement("div");
     note.className = "empty-note";
-    note.style.padding = "12px 0";
-    note.style.fontSize = "12px";
+    note.style.cssText = "padding:12px 0;font-size:12px";
     note.textContent = `${hiddenCount} lower-importance event${hiddenCount > 1 ? "s" : ""} hidden by filter`;
     wrap.appendChild(note);
   }
 
-  events.forEach((evt,i) => {
+  events.forEach((evt, i) => {
     const el = document.createElement("div");
     el.className = "list-ev";
     el.style.animationDelay = `${Math.min(i*30,600)}ms`;
     const col = evtColor(evt);
-    const imp = evt.importance||5;
-    const impOp = 0.2 + (imp/10)*0.8;
+    const imp = evt.importance || 5;
+    const sc = impScale(imp);
 
     let durBar = "";
     if (evt.end_date && evt.end_date !== evt.start_date) {
       durBar = `<div class="list-dur" style="background:${col};height:calc(100% - 18px)"></div>`;
     }
 
+    const glowClass = sc.glow ? " imp-glow" : "";
+
     el.innerHTML = `
-      <div class="list-dot" style="background:${col}"></div>
+      <div class="list-dot" style="background:${col};width:${sc.dotSize}px;height:${sc.dotSize}px"></div>
       ${durBar}
-      <div class="list-card">
-        <div class="list-imp" style="background:${col};opacity:${impOp}"></div>
+      <div class="list-card${glowClass}" style="padding:${sc.cardPad}px ${sc.cardPad + 4}px;opacity:${sc.opacity}">
+        <div class="list-imp" style="background:${col}"></div>
         <div class="list-date">${fmtDateRange(evt)}</div>
-        <div class="list-title">${esc(evt.title)}</div>
-        <div class="list-desc">${esc(evt.description||"")}</div>
+        <div class="list-title" style="font-size:${sc.titleSize}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</div>
+        <div class="list-desc" style="font-size:${sc.descSize}px">${esc(evt.description||"")}</div>
         <div class="list-meta">
           ${evt.category ? `<span class="list-cat">${esc(evt.category)}</span>` : ""}
           ${sourceDotsHtml(evt)}
@@ -263,19 +429,25 @@ function renderLinearView(events, hiddenCount, allEvts) {
 
   if (!parsed.length) { canvas.innerHTML = '<div class="empty-note">No valid dates found</div>'; return; }
 
+  parsed.sort((a, b) => a._start - b._start);
+
   const minTs = Math.min(...parsed.map(e => e._start));
   const maxTs = Math.max(...parsed.map(e => e._end || e._start));
   const span = maxTs - minTs || 1;
 
   const AXIS_LEFT = 110;
   const CARD_AREA_LEFT = AXIS_LEFT + 16;
-  const MIN_HEIGHT = 800;
   const PX_PER_YEAR = 70 * S.zoom;
-  const totalYears = span / (365.25*24*3600*1000);
-  const totalHeight = Math.max(MIN_HEIGHT, totalYears * PX_PER_YEAR + 120);
-  const pxPerMs = (totalHeight - 80) / span;
+  const totalYears = span / (365.25 * 24 * 3600 * 1000);
+  const basePxPerMs = PX_PER_YEAR / (365.25 * 24 * 3600 * 1000);
 
-  function yPos(ts) { return 40 + (ts - minTs) * pxPerMs; }
+  // Gap detection
+  const gaps = detectGaps(parsed);
+  const mapping = buildGapCroppedMapping(parsed, gaps, basePxPerMs, 40);
+
+  const totalHeight = Math.max(800, mapping.totalPx + 120);
+
+  function yPos(ts) { return mapping.posFunc(ts); }
 
   wrap.style.height = totalHeight + "px";
 
@@ -293,6 +465,9 @@ function renderLinearView(events, hiddenCount, allEvts) {
     const ts = new Date(y, 0, 1).getTime();
     if (ts < minTs || ts > maxTs) continue;
     const top = yPos(ts);
+    // Skip label if it falls inside a gap break region
+    const inGap = gaps.some(g => ts > g.startTs && ts < g.endTs);
+    if (inGap) continue;
     const lbl = document.createElement("div");
     lbl.className = "linear-year-label";
     lbl.style.top = top + "px";
@@ -303,6 +478,15 @@ function renderLinearView(events, hiddenCount, allEvts) {
     tick.style.top = top + "px";
     wrap.appendChild(tick);
   }
+
+  // Gap break indicators
+  mapping.gapBreaks.forEach(gb => {
+    const br = document.createElement("div");
+    br.className = "gap-break";
+    br.style.top = gb.pos + "px";
+    br.innerHTML = `<div class="gap-break-line">${GAP_BREAK_SVG}${GAP_BREAK_SVG}</div><span class="gap-break-label">${gb.label}</span>`;
+    wrap.appendChild(br);
+  });
 
   // Lane assignment
   const MIN_EVENT_H = 48;
@@ -358,8 +542,9 @@ function renderLinearView(events, hiddenCount, allEvts) {
     const isDuration = evt._end && evt._end !== evt._start;
     const col = evtColor(evt);
     const imp = evt.importance || 5;
-    const impOp = 0.2 + (imp/10) * 0.8;
+    const sc = impScale(imp);
     const left = CARD_AREA_LEFT + lane * (LANE_WIDTH + LANE_GAP);
+    const glowClass = sc.glow ? " imp-glow" : "";
 
     const el = document.createElement("div");
     el.className = "linear-ev";
@@ -372,9 +557,9 @@ function renderLinearView(events, hiddenCount, allEvts) {
       const h = Math.max(yEnd - yStart, 28);
       el.style.height = h + "px";
       el.innerHTML = `
-        <div class="linear-bar" style="background:${hexAlpha(col,0.2)};height:100%">
-          <div class="list-imp" style="background:${col};opacity:${impOp}"></div>
-          <span class="linear-bar-title" style="color:${col}">${esc(evt.title)}</span>
+        <div class="linear-bar${glowClass}" style="background:${hexAlpha(col,0.2)};height:100%;opacity:${sc.opacity}">
+          <div class="list-imp" style="background:${col}"></div>
+          <span class="linear-bar-title" style="color:${col};font-size:${sc.barTitleSize}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</span>
           <span class="linear-bar-dates">${fmtDateRange(evt)}</span>
           ${sourceDotsSmall(evt)}
         </div>
@@ -383,12 +568,12 @@ function renderLinearView(events, hiddenCount, allEvts) {
     } else {
       el.innerHTML = `
         <div class="linear-point">
-          <div class="linear-point-dot" style="background:${col}"></div>
-          <div class="linear-card">
-            <div class="list-imp" style="background:${col};opacity:${impOp}"></div>
+          <div class="linear-point-dot" style="background:${col};width:${sc.dotSize}px;height:${sc.dotSize}px"></div>
+          <div class="linear-card${glowClass}" style="padding:${sc.cardPad}px ${sc.cardPad + 2}px;opacity:${sc.opacity}">
+            <div class="list-imp" style="background:${col}"></div>
             <div class="list-date">${fmtDateRange(evt)}</div>
-            <div class="list-title">${esc(evt.title)}</div>
-            <div class="list-desc">${esc(evt.description||"")}</div>
+            <div class="list-title" style="font-size:${sc.titleSize}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</div>
+            <div class="list-desc" style="font-size:${sc.descSize}px">${esc(evt.description||"")}</div>
             ${sourceDotsHtml(evt) ? `<div style="margin-top:4px">${sourceDotsHtml(evt)}</div>` : ""}
           </div>
         </div>
@@ -422,29 +607,33 @@ function renderHorizontalView(events, hiddenCount, allEvts) {
 
   if (!parsed.length) { canvas.innerHTML = '<div class="empty-note">No valid dates found</div>'; return; }
 
+  parsed.sort((a, b) => a._start - b._start);
+
   const minTs = Math.min(...parsed.map(e => e._start));
   const maxTs = Math.max(...parsed.map(e => e._end || e._start));
   const span = maxTs - minTs || 1;
 
-  // Sizing: proportional horizontal layout
   const PAD_LEFT = 60;
   const PAD_RIGHT = 60;
   const PX_PER_YEAR_H = 150 * S.zoom;
-  const totalYears = span / (365.25*24*3600*1000);
-  const contentWidth = Math.max(800, totalYears * PX_PER_YEAR_H);
+  const totalYears = span / (365.25 * 24 * 3600 * 1000);
+  const basePxPerMs = PX_PER_YEAR_H / (365.25 * 24 * 3600 * 1000);
+
+  // Gap detection
+  const gaps = detectGaps(parsed);
+  const mapping = buildGapCroppedMapping(parsed, gaps, basePxPerMs, PAD_LEFT);
+
+  const contentWidth = mapping.totalPx || Math.max(800, totalYears * PX_PER_YEAR_H);
   const totalWidth = PAD_LEFT + contentWidth + PAD_RIGHT;
-  const pxPerMs = contentWidth / span;
 
-  function xPos(ts) { return PAD_LEFT + (ts - minTs) * pxPerMs; }
+  function xPos(ts) { return mapping.posFunc(ts); }
 
-  // Axis height: center of view
+  // Axis dimensions
   const CARD_HEIGHT = 80;
   const LANE_HEIGHT = CARD_HEIGHT + 12;
   const CONNECTOR_GAP = 16;
-  const AXIS_Y_OFFSET = 0; // relative to CSS top:50%
 
-  // ── Lane assignment: alternating above/below ──
-  // Sort by start position
+  // Lane assignment: alternating above/below
   const items = parsed.map((e, idx) => {
     const xStart = xPos(e._start);
     const xEnd = e._end ? Math.max(xPos(e._end), xStart + 100) : xStart + 200;
@@ -452,16 +641,13 @@ function renderHorizontalView(events, hiddenCount, allEvts) {
   });
   items.sort((a, b) => a.xStart - b.xStart);
 
-  // Greedy lane assignment — above lanes (0,1,2...) and below lanes (0,1,2...)
   const aboveLaneEnds = [];
   const belowLaneEnds = [];
 
   items.forEach(item => {
-    // Try above first, then below, alternating based on which has less vertical stacking
     const aboveLane = findFreeLane(aboveLaneEnds, item.xStart, item.xEnd);
     const belowLane = findFreeLane(belowLaneEnds, item.xStart, item.xEnd);
 
-    // Pick whichever side has a lower lane available
     if (aboveLane <= belowLane) {
       item.side = "above";
       item.lane = aboveLane;
@@ -479,25 +665,27 @@ function renderHorizontalView(events, hiddenCount, allEvts) {
   const maxBelowLanes = belowLaneEnds.length || 1;
   const halfHeight = Math.max(maxAboveLanes, maxBelowLanes) * LANE_HEIGHT + CONNECTOR_GAP + 40;
   const totalH = halfHeight * 2 + 40;
-  const axisY = halfHeight + 20; // vertical center
+  const axisY = halfHeight + 20;
 
   wrap.style.height = totalH + "px";
   wrap.style.minWidth = totalWidth + "px";
 
   // Axis line
-  const axis = document.createElement("div");
-  axis.className = "horiz-axis";
-  axis.style.top = axisY + "px";
-  axis.style.transform = "none";
-  wrap.appendChild(axis);
+  const axisEl = document.createElement("div");
+  axisEl.className = "horiz-axis";
+  axisEl.style.top = axisY + "px";
+  axisEl.style.transform = "none";
+  wrap.appendChild(axisEl);
 
-  // Year labels along axis
+  // Year labels
   const minYear = new Date(minTs).getFullYear();
   const maxYear = new Date(maxTs).getFullYear();
   const yearStep = getYearStep(maxYear - minYear, S.zoom);
   for (let y = minYear; y <= maxYear; y += yearStep) {
     const ts = new Date(y, 0, 1).getTime();
     if (ts < minTs || ts > maxTs) continue;
+    const inGap = gaps.some(g => ts > g.startTs && ts < g.endTs);
+    if (inGap) continue;
     const x = xPos(ts);
     const lbl = document.createElement("div");
     lbl.className = "horiz-year-label";
@@ -513,6 +701,16 @@ function renderHorizontalView(events, hiddenCount, allEvts) {
     tick.style.transform = "none";
     wrap.appendChild(tick);
   }
+
+  // Gap break indicators (horizontal)
+  mapping.gapBreaks.forEach(gb => {
+    const br = document.createElement("div");
+    br.className = "gap-break-h";
+    br.style.left = (gb.pos - 8) + "px";
+    br.style.top = (axisY - 24) + "px";
+    br.innerHTML = `${GAP_BREAK_SVG}<span class="gap-break-label">${gb.label}</span>`;
+    wrap.appendChild(br);
+  });
 
   // Cluster hidden events
   if (hiddenCount > 0) {
@@ -536,16 +734,14 @@ function renderHorizontalView(events, hiddenCount, allEvts) {
     const isDuration = evt._end && evt._end !== evt._start;
     const col = evtColor(evt);
     const imp = evt.importance || 5;
-    const impOp = 0.2 + (imp/10) * 0.8;
+    const sc = impScale(imp);
+    const glowClass = sc.glow ? " imp-glow" : "";
 
     const el = document.createElement("div");
     el.className = `horiz-ev ${side}`;
     el.style.animationDelay = `${Math.min(i * 20, 400)}ms`;
 
-    // Card dimensions
     const cardW = isDuration ? Math.max(xEnd - xStart, 100) : 200;
-
-    // Position
     el.style.left = xStart + "px";
     el.style.width = cardW + "px";
 
@@ -576,6 +772,8 @@ function renderHorizontalView(events, hiddenCount, allEvts) {
     const dot = document.createElement("div");
     dot.className = "horiz-dot";
     dot.style.background = col;
+    dot.style.width = sc.dotSize + "px";
+    dot.style.height = sc.dotSize + "px";
     if (side === "above") {
       dot.style.top = "auto";
       dot.style.bottom = "-" + (laneOffset + 4) + "px";
@@ -591,12 +789,13 @@ function renderHorizontalView(events, hiddenCount, allEvts) {
     // Card content
     if (isDuration) {
       const bar = document.createElement("div");
-      bar.className = "horiz-bar";
+      bar.className = `horiz-bar${glowClass}`;
       bar.style.background = hexAlpha(col, 0.2);
       bar.style.height = CARD_HEIGHT + "px";
+      bar.style.opacity = sc.opacity;
       bar.innerHTML = `
-        <div class="list-imp" style="background:${col};opacity:${impOp}"></div>
-        <span class="linear-bar-title" style="color:${col}">${esc(evt.title)}</span>
+        <div class="list-imp" style="background:${col}"></div>
+        <span class="linear-bar-title" style="color:${col};font-size:${sc.barTitleSize}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</span>
         <span class="linear-bar-dates">${fmtDateRange(evt)}</span>
         ${sourceDotsSmall(evt)}
       `;
@@ -604,13 +803,15 @@ function renderHorizontalView(events, hiddenCount, allEvts) {
       el.appendChild(bar);
     } else {
       const card = document.createElement("div");
-      card.className = "horiz-card";
+      card.className = `horiz-card${glowClass}`;
       card.style.width = "100%";
+      card.style.opacity = sc.opacity;
+      card.style.padding = `${sc.cardPad}px ${sc.cardPad + 2}px`;
       card.innerHTML = `
-        <div class="list-imp" style="background:${col};opacity:${impOp}"></div>
+        <div class="list-imp" style="background:${col}"></div>
         <div class="list-date">${fmtDateRange(evt)}</div>
-        <div class="list-title" style="font-size:12px">${esc(evt.title)}</div>
-        <div class="list-desc" style="font-size:11px;-webkit-line-clamp:2">${esc(evt.description||"")}</div>
+        <div class="list-title" style="font-size:${Math.max(sc.titleSize - 1, 11)}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</div>
+        <div class="list-desc" style="font-size:${Math.max(sc.descSize - 1, 10)}px;-webkit-line-clamp:2">${esc(evt.description||"")}</div>
       `;
       card.addEventListener("click", () => openModal(evt));
       el.appendChild(card);
@@ -623,7 +824,7 @@ function renderHorizontalView(events, hiddenCount, allEvts) {
 }
 
 // ── Helper: find free lane ─────────────────────────────────────────────────
-function findFreeLane(laneEnds, start, end) {
+function findFreeLane(laneEnds, start) {
   for (let l = 0; l < laneEnds.length; l++) {
     if (start >= laneEnds[l]) return l;
   }
@@ -652,7 +853,6 @@ function buildClusters(hiddenEvts, visibleParsed, posFunc, axis) {
 
   if (!hiddenParsed.length) return [];
 
-  // Group nearby hidden events into clusters
   const clusters = [];
   let current = { events: [hiddenParsed[0]], ts: hiddenParsed[0]._ts };
 
@@ -759,6 +959,16 @@ function openModal(evt) {
   _$("#mDates").textContent = fmtDateRange(evt);
   _$("#mDesc").textContent = evt.description || "";
 
+  // Importance pips
+  const impPips = _$("#mImpPips");
+  impPips.innerHTML = "";
+  const imp = evt.importance || 5;
+  for (let p = 1; p <= 10; p++) {
+    const pip = document.createElement("span");
+    pip.className = "m-imp-pip" + (p <= imp ? " filled" : "");
+    impPips.appendChild(pip);
+  }
+
   const srcEl = _$("#mSources"); srcEl.innerHTML = "";
   if (evt.source_timeline_name && evt.source_timeline_name.startsWith("[")) {
     try {
@@ -839,5 +1049,6 @@ densityDropdown.querySelectorAll(".dd-item").forEach(b => b.addEventListener("cl
 document.addEventListener("click", () => densityDropdown.classList.add("hidden"));
 
 // ── Init ───────────────────────────────────────────────────────────────────
+initTheme();
 lucide.createIcons();
 loadSessions();
