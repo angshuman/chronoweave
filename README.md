@@ -1,64 +1,76 @@
 # ChronoWeave
 
-A timeline research webapp that uses AI to research any topic and generate interactive, chronological timelines. Built with a Perplexity Computer-inspired dark UI.
+AI-powered timeline research app. Research any topic and get an interactive, chronological timeline with gap cropping, importance-based visuals, and multiple themes.
 
 ## Features
 
-- **AI-Powered Research** — Enter any topic and get a rich timeline of events with dates, descriptions, and tags
-- **Dual View Modes** — Linear view (proportional time spacing with lane-based overlap handling) and List view (sequential cards)
-- **Sessions** — Organize research into separate sessions, each with multiple timelines
-- **Intelligent Merge** — Merge multiple timelines with AI-powered deduplication that finds matching events across sources
-- **Unmerge** — Reverse any merge to restore original timelines
-- **Merge on Merge** — Stack multiple merges together
-- **Source Preservation** — Merged timelines visually preserve which source each event came from (color-coded dots)
-- **Duration Events** — Events can have start and end dates; overlapping events are arranged in lanes
-- **Event Modal** — Click any event to see full details, sources, and tags
+- **AI-Powered Research** — Enter any topic and get a rich timeline of events
+- **Three View Modes** — Vertical (proportional), Horizontal (above/below axis), List
+- **Sessions** — Organize research into separate threads
+- **Intelligent Merge / Unmerge** — AI-powered deduplication across timelines
+- **Gap Cropping** — Large time gaps compressed with visual break indicators
+- **Importance Scaling** — Card size, opacity, glow all scale by event importance (1-10)
+- **5 Themes** — Midnight, Slate, Ember, Forest, Light
+- **Zoom & Density** — Ctrl+scroll zoom, importance-based density filter
+- **Duration Events** — Events with start/end dates laid out in lanes
 
 ## Architecture
 
-- **Backend**: FastAPI + SQLite + Anthropic Claude API
-- **Frontend**: Vanilla HTML/CSS/JS with Lucide icons
-- **Database**: SQLite with sessions → timelines → events schema
+- **Backend**: Node.js + Express + better-sqlite3 + Anthropic Claude
+- **Frontend**: Vanilla HTML/CSS/JS + Lucide icons
+- **Deployment**: Vercel-ready (serverless functions + static assets)
 
-## Setup
-
-### Prerequisites
-
-- Python 3.10+
-- An Anthropic API key (Claude)
-
-### Backend
+## Local Development
 
 ```bash
-pip install fastapi uvicorn anthropic
-export ANTHROPIC_API_KEY="your-key-here"
-python api_server.py
+npm install
+ANTHROPIC_API_KEY=sk-... npm run dev
 ```
 
-The API server runs on port 8000.
+Open http://localhost:8000
 
-### Frontend
+## Deploy to Vercel
 
-Serve the static files (index.html, style.css, app.js) with any static file server:
+1. Push to GitHub
+2. Import project in [Vercel](https://vercel.com)
+3. Add environment variable: `ANTHROPIC_API_KEY`
+4. Deploy
 
-```bash
-npx serve -l 3000
+> **Note**: On Vercel, the SQLite database lives in `/tmp` and is ephemeral (resets on cold starts). For persistent storage, swap `better-sqlite3` with [Turso](https://turso.tech), [PlanetScale](https://planetscale.com), or Vercel Postgres.
+
+## Project Structure
+
 ```
-
-Open http://localhost:3000 in your browser.
+chronoweave/
+├── public/            # Static frontend
+│   ├── index.html
+│   ├── app.js
+│   └── style.css
+├── api/               # Vercel serverless functions
+│   └── index.js       # Catch-all API handler
+├── lib/               # Shared business logic
+│   ├── db.js          # SQLite database layer
+│   ├── llm.js         # Anthropic Claude helpers
+│   └── routes.js      # Route handlers
+├── server.js          # Express server (local dev)
+├── package.json
+├── vercel.json
+└── README.md
+```
 
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/sessions` | List all sessions |
-| POST | `/sessions` | Create a new session |
-| DELETE | `/sessions/{id}` | Delete a session |
-| GET | `/sessions/{id}/timelines` | Get timelines + events for a session |
-| POST | `/sessions/{id}/research` | Research a topic and create a timeline |
-| POST | `/sessions/{id}/merge` | Intelligently merge selected timelines |
-| POST | `/timelines/{id}/unmerge` | Unmerge a merged timeline |
-| DELETE | `/timelines/{id}` | Delete a timeline |
+| GET | `/api/sessions` | List all sessions |
+| POST | `/api/sessions` | Create a new session |
+| DELETE | `/api/sessions/:id` | Delete a session |
+| PUT | `/api/sessions/:id` | Update session name |
+| GET | `/api/sessions/:id/timelines` | Get timelines + events |
+| POST | `/api/research` | Research a topic |
+| POST | `/api/merge` | Merge selected timelines |
+| POST | `/api/unmerge` | Unmerge a merged timeline |
+| DELETE | `/api/timelines/:id` | Delete a timeline |
 
 ## License
 

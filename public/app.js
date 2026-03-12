@@ -1,6 +1,6 @@
 /* ChronoWeave — Timeline Research App */
 
-const API = "__PORT_8000__".startsWith("__") ? "http://localhost:8000" : "__PORT_8000__";
+const API = ""; // relative — works on localhost:8000 (Express) and Vercel
 
 // ── State ──────────────────────────────────────────────────────────────────
 const S = {
