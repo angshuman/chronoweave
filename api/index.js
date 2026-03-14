@@ -46,8 +46,38 @@ module.exports = async function handler(req, res) {
       return res.json(routes.listTimelines(parts[1]));
     }
 
-    // POST /api/research
-    if (req.method === "POST" && parts[0] === "research") {
+    // GET /api/research/stream (SSE streaming)
+    if (req.method === "GET" && parts[0] === "research" && parts[1] === "stream") {
+      const { session_id, query, color } = url.searchParams ? Object.fromEntries(url.searchParams) : req.query || {};
+      if (!session_id || !query) {
+        return res.status(400).json({ detail: "session_id and query required" });
+      }
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+      const send = (type, data) => {
+        res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+      };
+      try {
+        await routes.researchTopicStream(
+          { session_id, query, color },
+          (type, data) => { if (!res.writableEnded) send(type, data); }
+        );
+      } catch (err) {
+        if (!res.writableEnded) send("error", { message: err.message });
+      }
+      if (!res.writableEnded) {
+        res.write("event: done\ndata: {}\n\n");
+        res.end();
+      }
+      return;
+    }
+
+    // POST /api/research (non-streaming fallback)
+    if (req.method === "POST" && parts[0] === "research" && !parts[1]) {
       const tl = await routes.researchTopic(req.body);
       return res.json(tl);
     }
