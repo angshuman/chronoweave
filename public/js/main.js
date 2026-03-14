@@ -1,77 +1,58 @@
-/* ChronoWeave — Main Entry Point */
+/* ChronoWeave -- Main Entry Point */
 
 import { S } from './state.js';
-import { _$, viewSwitch, canvasWrap, densityDropdown, modalBg, sidebar, mergeBtn } from './dom.js';
-import { initTheme } from './themes.js';
-import { createSession, loadSessions, setResearchFn } from './sessions.js';
-import { doResearch } from './research.js';
-import { doMerge } from './merge.js';
-import { zoomIn, zoomOut, zoomFit } from './zoom.js';
-import { setMinImportance } from './density.js';
+import { loadPref, savePref } from './api.js';
+import { initSessions, loadSession } from './sessions.js';
+import { initThemes } from './themes.js';
+import { initZoom } from './zoom.js';
+import { initDensity } from './density.js';
+import { initModal } from './modal.js';
+import { initMerge } from './merge.js';
+import { initReasoning } from './reasoning.js';
 import { renderView } from './render.js';
+import {
+  researchForm, researchInput, btnResearch,
+  controlsBar, landing, viewContainer,
+  btnMerge,
+} from './dom.js';
 
-// Wire the circular dependency: sessions → research
-setResearchFn(doResearch);
+// ---- Init sub-systems ----
+initThemes();
+initSessions();
+initZoom();
+initDensity();
+initModal();
+initMerge();
+initReasoning();
 
-// ── Event Listeners ───────────────────────────────────────────────────────────────────────
-
-_$("#newSessionBtn").addEventListener("click", () => createSession());
-
-// Landing input
-_$("#landingInput").addEventListener("keydown", e => {
-  if (e.key === "Enter") { const q = e.target.value.trim(); if (q) createSession(q); }
+// ---- Research form ----
+researchForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const q = researchInput.value.trim();
+  if (!q || !S.sessionId) return;
+  researchInput.value = '';
+  await import('./research.js').then(m => m.doResearch(q));
 });
-_$("#landingSubmit").addEventListener("click", () => {
-  const q = _$("#landingInput").value.trim(); if (q) createSession(q);
-});
 
-// Session query input
-_$("#queryInput").addEventListener("keydown", e => {
-  if (e.key === "Enter") { const q = e.target.value.trim(); if (q) { e.target.value = ""; doResearch(q); } }
-});
-_$("#querySubmit").addEventListener("click", () => {
-  const q = _$("#queryInput").value.trim(); if (q) { _$("#queryInput").value = ""; doResearch(q); }
-});
+// ---- Gap crop toggle ----
+const gapToggle = document.getElementById('gapToggle');
+if (gapToggle) {
+  gapToggle.checked = loadPref('gapCrop', true);
+  S.gapCrop = gapToggle.checked;
+  gapToggle.addEventListener('change', () => {
+    S.gapCrop = gapToggle.checked;
+    savePref('gapCrop', S.gapCrop);
+    renderView();
+  });
+}
 
-mergeBtn.addEventListener("click", doMerge);
-_$("#mobileToggle").addEventListener("click", () => sidebar.classList.toggle("open"));
-_$("#mClose").addEventListener("click", () => modalBg.classList.add("hidden"));
-modalBg.addEventListener("click", e => { if (e.target === modalBg) modalBg.classList.add("hidden"); });
-
-// View switch
-viewSwitch.querySelectorAll(".vs-btn").forEach(b => b.addEventListener("click", () => {
-  viewSwitch.querySelectorAll(".vs-btn").forEach(x => x.classList.remove("active"));
-  b.classList.add("active");
-  S.view = b.dataset.view;
-  renderView();
-}));
-
-// Zoom controls
-_$("#zoomIn").addEventListener("click", zoomIn);
-_$("#zoomOut").addEventListener("click", zoomOut);
-_$("#zoomFit").addEventListener("click", zoomFit);
-
-// Mouse wheel zoom on canvas
-canvasWrap.addEventListener("wheel", e => {
-  if (e.ctrlKey || e.metaKey) {
-    e.preventDefault();
-    if (e.deltaY < 0) zoomIn();
-    else zoomOut();
+// ---- Keyboard shortcuts ----
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.getElementById('modalBg')?.classList.add('hidden');
   }
-}, { passive: false });
-
-// Density dropdown
-_$("#densityBtn").addEventListener("click", e => {
-  e.stopPropagation();
-  densityDropdown.classList.toggle("hidden");
 });
-densityDropdown.querySelectorAll(".dd-item").forEach(b => b.addEventListener("click", () => {
-  setMinImportance(parseInt(b.dataset.min));
-  densityDropdown.classList.add("hidden");
-}));
-document.addEventListener("click", () => densityDropdown.classList.add("hidden"));
 
-// ── Init ─────────────────────────────────────────────────────────────────────────────────
-initTheme();
-lucide.createIcons();
-loadSessions();
+// ---- Restore last session ----
+const lastSid = loadPref('lastSession', null);
+if (lastSid) loadSession(lastSid);

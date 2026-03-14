@@ -1,103 +1,107 @@
-/* ChronoWeave — Gap Detection & Cropped Mapping */
+/* ChronoWeave -- Gap Detection & Cropped Mapping */
 
-// Returns array of {afterIdx, startTs, endTs, label} for gaps to crop
-export function detectGaps(parsedEvents) {
-  if (parsedEvents.length < 2) return [];
-
+// Returns an array of {start, end} gap objects (in ms)
+// where the gap between consecutive dates exceeds threshold.
+export function detectGaps(dates, thresholdMs) {
   const gaps = [];
-  for (let i = 0; i < parsedEvents.length - 1; i++) {
-    const endTs = parsedEvents[i]._end || parsedEvents[i]._start;
-    const nextStart = parsedEvents[i + 1]._start;
-    const gapMs = nextStart - endTs;
-    if (gapMs > 0) {
-      gaps.push({ idx: i, gapMs, startTs: endTs, endTs: nextStart });
+  for (let i = 1; i < dates.length; i++) {
+    const prev = dates[i - 1];
+    const curr = dates[i];
+    if (curr - prev > thresholdMs) {
+      gaps.push({ start: prev, end: curr });
     }
   }
-
-  if (gaps.length < 2) return [];
-
-  const sorted = [...gaps].sort((a, b) => a.gapMs - b.gapMs);
-  const median = sorted[Math.floor(sorted.length / 2)].gapMs;
-  const threshold = median * 3;
-  const minGap = 365.25 * 24 * 3600 * 1000;
-
-  return gaps
-    .filter(g => g.gapMs > threshold && g.gapMs > minGap)
-    .map(g => {
-      const years = g.gapMs / (365.25 * 24 * 3600 * 1000);
-      let label;
-      if (years >= 1) {
-        label = `${Math.round(years)} year${Math.round(years) !== 1 ? "s" : ""} skipped`;
-      } else {
-        const months = Math.round(years * 12);
-        label = `${months} month${months !== 1 ? "s" : ""} skipped`;
-      }
-      return { afterIdx: g.idx, startTs: g.startTs, endTs: g.endTs, gapMs: g.gapMs, label };
-    });
+  return gaps;
 }
 
-// Build a position mapping that compresses gaps into fixed-size breaks
-// Returns { posFunc(ts), totalSize, gapBreaks: [{pos, label}] }
-export function buildGapCroppedMapping(parsedEvents, gaps, pxPerMsNormal, startOffset) {
-  if (!gaps.length) {
-    const minTs = parsedEvents[0]._start;
+/**
+ * Build a cropped time mapping:
+ * Given a sorted list of event dates (ms), a gap threshold, and
+ * a desired total visual width, returns a function
+ *   mapTime(dateMs) -> x (pixels)
+ * that compresses large gaps.
+ *
+ * Also returns:
+ *   gaps: array of {start, end, xStart, xEnd, label} for rendering break indicators
+ *   totalWidth: the actual rendered width in pixels
+ */
+export function buildCroppedMap(dates, opts = {}) {
+  const {
+    thresholdMs = 1000 * 60 * 60 * 24 * 365 * 5, // 5 years default
+    gapWidthPx  = 40,   // how wide to render a compressed gap
+    paddingPx   = 60,   // padding on each side
+    pxPerMs     = null, // if null, auto-scale
+    containerW  = 1200, // reference container width
+  } = opts;
+
+  if (!dates || dates.length === 0) {
+    return { mapTime: () => paddingPx, gaps: [], totalWidth: containerW };
+  }
+
+  const sorted = [...new Set(dates)].sort((a, b) => a - b);
+  if (sorted.length === 1) {
     return {
-      posFunc: ts => startOffset + (ts - minTs) * pxPerMsNormal,
-      totalExtent: (parsedEvents[parsedEvents.length - 1]._end || parsedEvents[parsedEvents.length - 1]._start) - minTs,
-      gapBreaks: [],
-      effectivePxPerMs: pxPerMsNormal,
+      mapTime: () => containerW / 2,
+      gaps: [],
+      totalWidth: containerW,
     };
   }
 
-  const GAP_PX = 40;
-  const minTs = parsedEvents[0]._start;
-  const maxTs = Math.max(...parsedEvents.map(e => e._end || e._start));
-
-  const sortedGaps = [...gaps].sort((a, b) => a.startTs - b.startTs);
-
+  // Identify segments (runs of dates without large gaps)
   const segments = [];
-  let prevEnd = minTs;
-  let accOffset = 0;
+  let segStart = sorted[0];
+  let segDates = [sorted[0]];
 
-  sortedGaps.forEach(g => {
-    const segSpan = g.startTs - prevEnd;
-    if (segSpan > 0) {
-      segments.push({ fromTs: prevEnd, toTs: g.startTs, pxStart: accOffset, pxSpan: segSpan * pxPerMsNormal });
-      accOffset += segSpan * pxPerMsNormal;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] - sorted[i - 1] > thresholdMs) {
+      segments.push({ start: segStart, end: sorted[i - 1], dates: segDates });
+      segStart = sorted[i];
+      segDates = [sorted[i]];
+    } else {
+      segDates.push(sorted[i]);
     }
-    segments.push({ isGap: true, pxStart: accOffset, label: g.label, fromTs: g.startTs, toTs: g.endTs });
-    accOffset += GAP_PX;
-    prevEnd = g.endTs;
-  });
+  }
+  segments.push({ start: segStart, end: sorted[sorted.length - 1], dates: segDates });
 
-  const finalSpan = maxTs - prevEnd;
-  if (finalSpan > 0) {
-    segments.push({ fromTs: prevEnd, toTs: maxTs, pxStart: accOffset, pxSpan: finalSpan * pxPerMsNormal });
-    accOffset += finalSpan * pxPerMsNormal;
+  // Total real time span across segments (excluding gaps)
+  const totalRealMs = segments.reduce((acc, s) => acc + (s.end - s.start || 1), 0);
+  const numGaps = segments.length - 1;
+  const availW = containerW - paddingPx * 2 - numGaps * gapWidthPx;
+  const scale = availW > 0 ? availW / totalRealMs : 1;
+
+  // Build segment pixel offsets
+  let cursor = paddingPx;
+  const segOffsets = [];
+  for (let i = 0; i < segments.length; i++) {
+    segOffsets.push(cursor);
+    cursor += (segments[i].end - segments[i].start) * scale;
+    if (i < segments.length - 1) cursor += gapWidthPx;
+  }
+  const totalWidth = cursor + paddingPx;
+
+  // Build gap metadata
+  const gapsMeta = [];
+  for (let i = 0; i < numGaps; i++) {
+    const xStart = segOffsets[i] + (segments[i].end - segments[i].start) * scale;
+    const xEnd   = xStart + gapWidthPx;
+    const ms     = segments[i + 1].start - segments[i].end;
+    const years  = Math.round(ms / (1000 * 60 * 60 * 24 * 365.25));
+    const label  = years >= 2 ? `~${years}y gap` : '~gap';
+    gapsMeta.push({ start: segments[i].end, end: segments[i + 1].start, xStart, xEnd, label });
   }
 
-  const gapBreaks = segments.filter(s => s.isGap).map(s => ({
-    pos: startOffset + s.pxStart + GAP_PX / 2,
-    label: s.label,
-  }));
-
-  function posFunc(ts) {
-    for (const seg of segments) {
-      if (seg.isGap) {
-        if (ts >= seg.fromTs && ts <= seg.toTs) {
-          return startOffset + seg.pxStart + GAP_PX / 2;
-        }
-        continue;
-      }
-      if (ts >= seg.fromTs && ts <= seg.toTs) {
-        const frac = (ts - seg.fromTs) / (seg.toTs - seg.fromTs || 1);
-        return startOffset + seg.pxStart + frac * seg.pxSpan;
+  function mapTime(dateMs) {
+    // Find which segment this date belongs to
+    for (let i = 0; i < segments.length; i++) {
+      if (dateMs <= segments[i].end + 1) {
+        const rel = Math.max(0, dateMs - segments[i].start);
+        return segOffsets[i] + rel * scale;
       }
     }
-    const lastSeg = segments[segments.length - 1];
-    if (lastSeg.isGap) return startOffset + lastSeg.pxStart + GAP_PX;
-    return startOffset + lastSeg.pxStart + lastSeg.pxSpan;
+    // After last segment
+    const last = segments[segments.length - 1];
+    return segOffsets[segments.length - 1] + (dateMs - last.start) * scale;
   }
 
-  return { posFunc, totalPx: accOffset, gapBreaks, effectivePxPerMs: pxPerMsNormal };
+  return { mapTime, gaps: gapsMeta, totalWidth };
 }

@@ -1,161 +1,138 @@
-/* ChronoWeave — Date & Event Helpers */
+/* ChronoWeave -- Date & Event Helpers */
 
 import { S } from './state.js';
-import { esc } from './utils.js';
 
-// ── Date parsing & formatting ───────────────────────────────────────────────────────
-
-export function parseDate(s) {
-  if (!s) return null;
-  if (/^\d{4}$/.test(s)) return new Date(parseInt(s), 0, 1).getTime();
-  if (/^\d{4}-\d{2}$/.test(s)) {
-    const [y, m] = s.split("-");
-    return new Date(parseInt(y), parseInt(m) - 1, 1).getTime();
+/**
+ * Parse an ISO-ish date string (YYYY, YYYY-MM, YYYY-MM-DD) to a Date object.
+ * Returns null for invalid dates.
+ */
+export function parseDate(str) {
+  if (!str) return null;
+  str = String(str).trim();
+  // YYYY
+  if (/^\d{4}$/.test(str))          return new Date(+str, 0, 1);
+  // YYYY-MM
+  if (/^\d{4}-\d{2}$/.test(str)) {
+    const [y, m] = str.split('-').map(Number);
+    return new Date(y, m - 1, 1);
   }
-  return new Date(s + "T00:00:00").getTime();
+  // YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const [y, m, d] = str.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  // Fallback
+  const d = new Date(str);
+  return isNaN(d) ? null : d;
 }
 
-export function fmtDate(s) {
-  if (!s) return "?";
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  if (/^\d{4}$/.test(s)) return s;
-  if (/^\d{4}-\d{2}$/.test(s)) {
-    const [y, m] = s.split("-");
-    return `${months[parseInt(m, 10) - 1]} ${y}`;
-  }
-  try {
-    const d = new Date(s + "T00:00:00");
-    return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
-  } catch { return s; }
+/**
+ * Format a date for display based on precision.
+ */
+export function formatDate(str, precision = 'day') {
+  const d = parseDate(str);
+  if (!d) return str || '';
+  if (precision === 'year')  return d.getFullYear().toString();
+  if (precision === 'month') return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export function fmtDateRange(evt) {
-  const start = fmtDate(evt.start_date);
-  if (!evt.end_date || evt.end_date === evt.start_date) return start;
-  const end = fmtDate(evt.end_date);
-  return `${start} → ${end}`;
+/**
+ * Format a date range: "Jan 2020 - Dec 2022"
+ */
+export function formatDateRange(start, end, precision) {
+  if (!end) return formatDate(start, precision);
+  return `${formatDate(start, precision)} - ${formatDate(end, precision)}`;
 }
 
-// ── Event color ──────────────────────────────────────────────────────────────────────
-
-export function evtColor(evt) {
-  if (evt.source_color && evt.source_color.startsWith("[")) {
-    try { return JSON.parse(evt.source_color)[0] || evt._tl.color; } catch { /* ignore */ }
-  }
-  return evt.source_color || evt._tl.color;
-}
-
-// ── Source dots / labels (for merged events) ───────────────────────────────────────────
-
-export function sourceDotsHtml(evt) {
-  if (evt.source_timeline_name && evt.source_timeline_name.startsWith("[")) {
-    try {
-      const srcs = JSON.parse(evt.source_timeline_name);
-      const cols = JSON.parse(evt.source_color || "[]");
-      return `<span class="list-source-dots">${srcs.map((s, i) =>
-        `<span class="sdot" style="background:${cols[i]?.color || cols[i] || "#6e7bf2"}" title="${esc(s.name || s)}"></span>`
-      ).join("")}</span>`;
-    } catch { /* ignore */ }
-  }
-  return "";
-}
-
-export function sourceDotsSmall(evt) {
-  if (evt.source_timeline_name && evt.source_timeline_name.startsWith("[")) {
-    try {
-      const srcs = JSON.parse(evt.source_timeline_name);
-      const cols = JSON.parse(evt.source_color || "[]");
-      return `<span class="sdots">${srcs.map((s, i) =>
-        `<span class="sdot" style="background:${cols[i]?.color || cols[i] || "#6e7bf2"}"></span>`
-      ).join("")}</span>`;
-    } catch { /* ignore */ }
-  }
-  return "";
-}
-
-export function sourceLabel(evt) {
-  if (evt.source_timeline_name && evt.source_timeline_name.startsWith("[")) {
-    try {
-      const srcs = JSON.parse(evt.source_timeline_name);
-      return `<span class="list-source-label">From: ${srcs.map(s => s.name || s).join(", ")}</span>`;
-    } catch { /* ignore */ }
-  }
-  if (evt._tl.is_merged && evt.source_timeline_name && !evt.source_timeline_name.startsWith("[")) {
-    return `<span class="list-source-label">From: ${esc(evt.source_timeline_name)}</span>`;
-  }
-  return "";
-}
-
-// ── Importance scaling ─────────────────────────────────────────────────────────────────
-
+/**
+ * Importance -> visual scale factor (0.75 .. 1.0)
+ * Used to scale card sizes, font opacity, etc.
+ */
 export function impScale(imp) {
-  const t = (imp - 1) / 9; // 0..1
-  return {
-    cardPad: Math.round(6 + t * 8),
-    titleSize: Math.round(11 + t * 5),
-    descSize: Math.round(10 + t * 4),
-    dotSize: Math.round(7 + t * 7),
-    opacity: +(0.45 + t * 0.55).toFixed(2),
-    titleWeight: t < 0.4 ? 500 : (t < 0.7 ? 600 : 700),
-    glow: imp >= 7,
-    barTitleSize: Math.round(11 + t * 3),
-  };
+  const v = Math.max(1, Math.min(10, imp || 5));
+  return 0.75 + (v - 1) * (0.25 / 9);
 }
 
-// ── Year step for axis labels ───────────────────────────────────────────────────────
-
-export function getYearStep(yearRange, zoom) {
-  const effectiveRange = yearRange / zoom;
-  if (effectiveRange > 200) return 50;
-  if (effectiveRange > 100) return 20;
-  if (effectiveRange > 50) return 10;
-  if (effectiveRange > 20) return 5;
-  if (effectiveRange > 10) return 2;
-  return 1;
+/**
+ * Importance -> opacity (0.55 .. 1.0)
+ */
+export function impOpacity(imp) {
+  const v = Math.max(1, Math.min(10, imp || 5));
+  return 0.55 + (v - 1) * (0.45 / 9);
 }
 
-// ── Free lane finder ────────────────────────────────────────────────────────────────────
-
-export function findFreeLane(laneEnds, start) {
-  for (let l = 0; l < laneEnds.length; l++) {
-    if (start >= laneEnds[l]) return l;
-  }
-  return laneEnds.length;
+/**
+ * Importance -> glow intensity (0 .. 1)
+ */
+export function impGlow(imp) {
+  const v = Math.max(1, Math.min(10, imp || 5));
+  return (v - 1) / 9;
 }
 
-// ── Cluster builder for hidden events ───────────────────────────────────────────────
-
-export function buildClusters(hiddenEvts, visibleParsed, posFunc, axis) {
-  if (!hiddenEvts.length) return [];
-  const hiddenParsed = hiddenEvts
-    .map(e => ({ ...e, _ts: parseDate(e.start_date) }))
-    .filter(e => e._ts)
-    .sort((a, b) => a._ts - b._ts);
-  if (!hiddenParsed.length) return [];
-  const clusters = [];
-  let current = { events: [hiddenParsed[0]], ts: hiddenParsed[0]._ts };
-  const clusterThreshold = axis === "horizontal" ? 100 / (S.zoom || 1) : 60 / (S.zoom || 1);
-  for (let i = 1; i < hiddenParsed.length; i++) {
-    const e = hiddenParsed[i];
-    const pos = posFunc(e._ts);
-    const prevPos = posFunc(current.events[current.events.length - 1]._ts);
-    if (Math.abs(pos - prevPos) < clusterThreshold) {
-      current.events.push(e);
-    } else {
-      clusters.push(current);
-      current = { events: [e], ts: e._ts };
+/**
+ * Given a list of visible timeline IDs and the current session timelines,
+ * return all events (deduped by ID, sorted by start_date) for visible timelines.
+ */
+export function gatherEvents() {
+  const visIds = new Set(S.visibleTimelines);
+  const all = [];
+  const seen = new Set();
+  for (const tl of S.timelines) {
+    if (!visIds.has(tl.id)) continue;
+    for (const ev of (tl.events || [])) {
+      if (!seen.has(ev.id)) {
+        seen.add(ev.id);
+        all.push({ ...ev, _tlColor: tl.color });
+      }
     }
   }
-  clusters.push(current);
-  return clusters.map(cl => {
-    const midTs = cl.events[Math.floor(cl.events.length / 2)]._ts;
-    const pos = posFunc(midTs);
-    return {
-      count: cl.events.length,
-      label: cl.events.length === 1 ? "hidden event" : "hidden events",
-      titles: cl.events.map(e => `[${e.importance || 5}] ${e.title}`),
-      x: axis === "horizontal" ? pos : 0,
-      y: axis === "vertical" ? pos : 0,
-    };
+  all.sort((a, b) => {
+    const da = parseDate(a.start_date), db = parseDate(b.start_date);
+    if (!da && !db) return 0;
+    if (!da) return 1;
+    if (!db) return -1;
+    return da - db;
   });
+  return all;
+}
+
+/**
+ * Filter events by minimum importance.
+ */
+export function filterByImportance(events) {
+  return events.filter(e => (e.importance || 5) >= S.minImportance);
+}
+
+/**
+ * Source label from an event (handles merged multi-source).
+ */
+export function sourceLabel(ev) {
+  if (!ev.source_timeline_name) return '';
+  try {
+    const arr = JSON.parse(ev.source_timeline_name);
+    if (Array.isArray(arr)) return arr.map(x => x.name || '?').join(', ');
+  } catch {}
+  return ev.source_timeline_name;
+}
+
+/**
+ * Color for an event dot/card border.
+ */
+export function eventColor(ev) {
+  if (!ev.source_color) return ev._tlColor || 'var(--accent)';
+  try {
+    const arr = JSON.parse(ev.source_color);
+    if (Array.isArray(arr)) return arr[0] || 'var(--accent)';
+  } catch {}
+  return ev.source_color || ev._tlColor || 'var(--accent)';
+}
+
+/**
+ * Parse tags (stored as JSON string or array).
+ */
+export function parseTags(tags) {
+  if (!tags) return [];
+  if (Array.isArray(tags)) return tags;
+  try { return JSON.parse(tags); } catch { return []; }
 }

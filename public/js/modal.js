@@ -1,54 +1,59 @@
-/* ChronoWeave — Modal */
+/* ChronoWeave -- Modal */
 
 import { _$, modalBg } from './dom.js';
-import { esc } from './utils.js';
-import { fmtDateRange } from './helpers.js';
+import { formatDateRange, sourceLabel, parseTags, impOpacity, eventColor } from './helpers.js';
 
-export function openModal(evt) {
-  _$("#mTitle").textContent = evt.title;
-  _$("#mDates").textContent = fmtDateRange(evt);
-  _$("#mDesc").textContent = evt.description || "";
+export function initModal() {
+  _$('#modalClose').addEventListener('click', closeModal);
+  modalBg.addEventListener('click', (e) => {
+    if (e.target === modalBg) closeModal();
+  });
+}
 
-  // Importance pips
-  const impPips = _$("#mImpPips");
-  impPips.innerHTML = "";
-  const imp = evt.importance || 5;
-  for (let p = 1; p <= 10; p++) {
-    const pip = document.createElement("span");
-    pip.className = "m-imp-pip" + (p <= imp ? " filled" : "");
-    impPips.appendChild(pip);
+export function openModal(ev) {
+  _$('#modalDate').textContent  = formatDateRange(ev.start_date, ev.end_date, ev.date_precision);
+  _$('#modalTitle').textContent = ev.title || '';
+  _$('#modalDesc').textContent  = ev.description || '';
+
+  const meta = _$('#modalMeta');
+  meta.innerHTML = '';
+
+  const tags = parseTags(ev.tags);
+  tags.forEach(t => {
+    const span = document.createElement('span');
+    span.className = 'modal-tag';
+    span.textContent = t;
+    meta.appendChild(span);
+  });
+
+  if (ev.category) {
+    const span = document.createElement('span');
+    span.className = 'modal-tag';
+    span.textContent = ev.category;
+    meta.appendChild(span);
   }
 
-  const srcEl = _$("#mSources");
-  srcEl.innerHTML = "";
-  if (evt.source_timeline_name && evt.source_timeline_name.startsWith("[")) {
-    try {
-      const srcs = JSON.parse(evt.source_timeline_name);
-      const cols = JSON.parse(evt.source_color || "[]");
-      srcs.forEach((s, i) => {
-        const it = document.createElement("span");
-        it.className = "m-src-item";
-        it.innerHTML = `<span class="m-src-dot" style="background:${cols[i]?.color || cols[i] || "#6e7bf2"}"></span>${esc(s.name || s)}`;
-        srcEl.appendChild(it);
-      });
-    } catch { /* ignore */ }
-  } else if (evt._tl.is_merged && evt.source_timeline_name) {
-    const it = document.createElement("span");
-    it.className = "m-src-item";
-    it.innerHTML = `<span class="m-src-dot" style="background:${evt.source_color || "#6e7bf2"}"></span>${esc(evt.source_timeline_name)}`;
-    srcEl.appendChild(it);
+  const src = sourceLabel(ev);
+  if (src) {
+    const span = document.createElement('span');
+    span.className = 'modal-tag';
+    span.style.color = eventColor(ev);
+    span.textContent = src;
+    meta.appendChild(span);
   }
 
-  const tagEl = _$("#mTags");
-  tagEl.innerHTML = "";
-  try {
-    JSON.parse(evt.tags || "[]").forEach(t => {
-      const sp = document.createElement("span");
-      sp.className = "m-tag";
-      sp.textContent = t;
-      tagEl.appendChild(sp);
-    });
-  } catch { /* ignore */ }
+  const imp = document.createElement('span');
+  imp.className = 'modal-tag';
+  imp.textContent = `Importance: ${ev.importance || 5}`;
+  meta.appendChild(imp);
 
-  modalBg.classList.remove("hidden");
+  const box = _$('#modalBox');
+  box.style.borderTop = `3px solid ${eventColor(ev)}`;
+  box.style.opacity = String(impOpacity(ev.importance));
+
+  modalBg.classList.remove('hidden');
+}
+
+export function closeModal() {
+  modalBg.classList.add('hidden');
 }

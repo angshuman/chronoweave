@@ -1,169 +1,171 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="midnight">
 <head>
-<!--
-   ______                            __
-  / ____/___  ____ ___  ____  __  __/ /____  _____
- / /   / __ \/ __ `__ \/ __ \/ / / / __/ _ \/ ___/
-/ /___/ /_/ / / / / / / /_/ / /_/ / /_/  __/ /
-\____/\____/_/ /_/ /_/ .___/\__,_/\__/\___/_/
-                    /_/
-        Created with Perplexity Computer
-        https://www.perplexity.ai/computer
--->
-<meta name="generator" content="Perplexity Computer">
-<meta name="author" content="Perplexity Computer">
-<meta property="og:see_also" content="https://www.perplexity.ai/computer">
-<link rel="author" href="https://www.perplexity.ai/computer">
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChronoWeave</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.js"></script>
-<link rel="stylesheet" href="./css/themes.css">
-<link rel="stylesheet" href="./css/base.css">
-<link rel="stylesheet" href="./css/layout.css">
-<link rel="stylesheet" href="./css/controls.css">
-<link rel="stylesheet" href="./css/views.css">
-<link rel="stylesheet" href="./css/modal.css">
-<link rel="stylesheet" href="./css/reasoning.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChronoWeave</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/themes.css">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/layout.css">
+  <link rel="stylesheet" href="/css/controls.css">
+  <link rel="stylesheet" href="/css/modal.css">
+  <link rel="stylesheet" href="/css/reasoning.css">
+  <link rel="stylesheet" href="/css/views.css">
+  <style>
+    /* inline critical above-fold: hide FOUC */
+    html, body { margin:0; padding:0; background:#0d0f14; color:#e8eaf2; }
+  </style>
 </head>
 <body>
-  <div id="app">
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-top">
-        <button class="btn-new" id="newSessionBtn"><i data-lucide="plus" style="width:16px;height:16px"></i> New thread</button>
-      </div>
-      <nav class="session-nav" id="sessionNav"></nav>
-      <div class="sidebar-bottom">
-        <div class="theme-picker">
-          <span class="theme-picker-label">Theme</span>
-          <button class="theme-dot active" data-theme="midnight" aria-label="Midnight theme"></button>
-          <button class="theme-dot" data-theme="slate" aria-label="Slate theme"></button>
-          <button class="theme-dot" data-theme="ember" aria-label="Ember theme"></button>
-          <button class="theme-dot" data-theme="forest" aria-label="Forest theme"></button>
-          <button class="theme-dot" data-theme="light" aria-label="Light theme"></button>
+<div class="app-shell">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">Chrono<span>Weave</span></div>
+      <button class="btn-new-session" id="btnNewSession">+ Session</button>
+    </div>
+    <div class="session-list" id="sessionList"></div>
+    <div class="theme-row">
+      <span class="theme-label">Theme</span>
+      <button class="theme-dot" data-theme="midnight" style="background:#6e7bf2" title="Midnight"></button>
+      <button class="theme-dot" data-theme="slate"    style="background:#7aa2f7" title="Slate"></button>
+      <button class="theme-dot" data-theme="ember"    style="background:#f97316" title="Ember"></button>
+      <button class="theme-dot" data-theme="forest"   style="background:#4ade80" title="Forest"></button>
+      <button class="theme-dot" data-theme="light"    style="background:#c7c8f2" title="Light"></button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- TOPBAR -->
+    <div class="topbar" id="topbar">
+      <div class="topbar-title" id="topbarTitle">ChronoWeave</div>
+      <form class="research-form" id="researchForm">
+        <input
+          class="research-input"
+          id="researchInput"
+          type="text"
+          placeholder="Research a topic..."
+          autocomplete="off"
+        >
+        <button class="btn-research" id="btnResearch" type="submit">Research</button>
+      </form>
+      <button class="btn-reasoning-toggle hidden" id="btnReasoningToggle">
+        <span>Reasoning</span>
+        <span class="chevron">v</span>
+      </button>
+    </div>
+
+    <!-- REASONING PANEL -->
+    <div class="reasoning-panel" id="reasoningPanel">
+      <div class="reasoning-inner">
+        <div class="reasoning-header">
+          <span class="spinner" id="reasoningSpinner"></span>
+          <span>AI Reasoning</span>
+          <span class="reasoning-status" id="reasoningStatus"></span>
         </div>
-        <a href="https://www.perplexity.ai/computer" target="_blank" rel="noopener noreferrer" class="attr-link" style="margin-top:10px">Built with Perplexity Computer</a>
-      </div>
-    </aside>
-
-    <main class="main" id="main">
-      <!-- Landing -->
-      <div class="landing" id="landing">
-        <div class="landing-inner">
-          <svg class="landing-logo" width="48" height="48" viewBox="0 0 48 48" fill="none">
-            <circle cx="24" cy="24" r="20" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
-            <circle cx="24" cy="24" r="10" stroke="#6e7bf2" stroke-width="1.5"/>
-            <circle cx="24" cy="24" r="3" fill="#6e7bf2"/>
-            <line x1="24" y1="4" x2="24" y2="14" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
-            <line x1="24" y1="34" x2="24" y2="44" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
-            <line x1="4" y1="24" x2="14" y2="24" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
-            <line x1="34" y1="24" x2="44" y2="24" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
-          </svg>
-          <h1 class="landing-title">What would you like to explore?</h1>
-          <p class="landing-sub">Research any topic and ChronoWeave will build an interactive timeline</p>
-          <div class="landing-input-wrap">
-            <input type="text" id="landingInput" placeholder="e.g. History of Artificial Intelligence" autocomplete="off">
-            <button class="btn-submit" id="landingSubmit"><i data-lucide="arrow-right" style="width:18px;height:18px"></i></button>
-          </div>
+        <div class="reasoning-progress">
+          <div class="reasoning-progress-bar" id="reasoningProgressBar"></div>
         </div>
-      </div>
-
-      <!-- Session View -->
-      <div class="session-view hidden" id="sessionView">
-        <header class="topbar">
-          <button class="icon-btn mobile-toggle" id="mobileToggle" aria-label="Menu"><i data-lucide="panel-left" style="width:18px;height:18px"></i></button>
-          <h2 class="topbar-title" id="topbarTitle">Thread</h2>
-          <div class="topbar-actions">
-            <div class="view-switch" id="viewSwitch">
-              <button class="vs-btn active" data-view="linear"><i data-lucide="arrow-down" style="width:14px;height:14px"></i> Vertical</button>
-              <button class="vs-btn" data-view="horizontal"><i data-lucide="arrow-right" style="width:14px;height:14px"></i> Horizontal</button>
-              <button class="vs-btn" data-view="list"><i data-lucide="list" style="width:14px;height:14px"></i> List</button>
-            </div>
-            <div class="zoom-controls" id="zoomControls">
-              <button class="zoom-btn" id="zoomOut" aria-label="Zoom out"><i data-lucide="minus" style="width:14px;height:14px"></i></button>
-              <span class="zoom-level" id="zoomLevel">100%</span>
-              <button class="zoom-btn" id="zoomIn" aria-label="Zoom in"><i data-lucide="plus" style="width:14px;height:14px"></i></button>
-              <button class="zoom-btn" id="zoomFit" aria-label="Fit to view"><i data-lucide="maximize-2" style="width:14px;height:14px"></i></button>
-            </div>
-            <div class="density-control" id="densityControl">
-              <button class="density-btn" id="densityBtn" aria-label="Density filter"><i data-lucide="filter" style="width:14px;height:14px"></i> <span id="densityLabel">All</span></button>
-              <div class="density-dropdown hidden" id="densityDropdown">
-                <button class="dd-item active" data-min="0">All events</button>
-                <button class="dd-item" data-min="3">Importance 3+</button>
-                <button class="dd-item" data-min="5">Importance 5+</button>
-                <button class="dd-item" data-min="7">Major only (7+)</button>
-                <button class="dd-item" data-min="9">Critical only (9+)</button>
-              </div>
-            </div>
-            <button class="btn-merge" id="mergeBtn" disabled><i data-lucide="git-merge" style="width:14px;height:14px"></i> Merge</button>
-          </div>
-        </header>
-
-        <div class="chips-bar" id="chipsBar"></div>
-
-        <div class="canvas-wrap" id="canvasWrap">
-          <div class="canvas" id="canvas"></div>
+        <div class="reasoning-scroll">
+          <pre class="reasoning-text" id="reasoningText"></pre>
         </div>
-
-        <div class="input-bar">
-          <div class="input-wrap">
-            <input type="text" id="queryInput" placeholder="Research another topic..." autocomplete="off">
-            <button class="btn-submit" id="querySubmit"><i data-lucide="arrow-right" style="width:18px;height:18px"></i></button>
-          </div>
-        </div>
-      </div>
-    </main>
-  </div>
-
-  <!-- Modal -->
-  <div class="modal-bg hidden" id="modalBg">
-    <div class="modal" role="dialog">
-      <div class="modal-head"><h3 id="mTitle"></h3><button class="icon-btn" id="mClose" aria-label="Close"><i data-lucide="x" style="width:16px;height:16px"></i></button></div>
-      <div class="modal-body">
-        <div class="m-dates" id="mDates"></div>
-        <div class="m-desc" id="mDesc"></div>
-        <div class="m-imp-bar" id="mImpBar"><span class="m-imp-label">Importance</span><span class="m-imp-pips" id="mImpPips"></span></div>
-        <div class="m-sources" id="mSources"></div>
-        <div class="m-tags" id="mTags"></div>
       </div>
     </div>
-  </div>
 
-  <!-- Reasoning Panel -->
-  <div class="reasoning-overlay hidden" id="reasoningOverlay">
-    <div class="reasoning-panel">
-      <div class="reasoning-header">
-        <div class="reasoning-status">
-          <div class="reasoning-pulse" id="reasoningPulse"></div>
-          <span class="reasoning-phase" id="reasoningPhase">Initializing...</span>
-        </div>
-        <button class="reasoning-toggle" id="reasoningToggle" aria-label="Toggle detail">
-          <i data-lucide="chevron-down" style="width:16px;height:16px"></i>
+    <!-- CONTROLS BAR -->
+    <div class="controls-bar hidden" id="controlsBar">
+      <div class="view-switch">
+        <button class="view-btn active" data-view="vertical" id="btnViewVertical">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <rect x="5" y="0" width="2" height="12" rx="1" fill="currentColor"/>
+            <circle cx="6" cy="3" r="2" fill="currentColor"/>
+            <circle cx="6" cy="9" r="2" fill="currentColor"/>
+          </svg>
+          Vertical
+        </button>
+        <button class="view-btn" data-view="horizontal" id="btnViewHorizontal">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <rect x="0" y="5" width="12" height="2" rx="1" fill="currentColor"/>
+            <circle cx="3" cy="6" r="2" fill="currentColor"/>
+            <circle cx="9" cy="6" r="2" fill="currentColor"/>
+          </svg>
+          Horizontal
+        </button>
+        <button class="view-btn" data-view="list" id="btnViewList">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <rect x="0" y="1" width="12" height="2" rx="1" fill="currentColor"/>
+            <rect x="0" y="5" width="12" height="2" rx="1" fill="currentColor"/>
+            <rect x="0" y="9" width="12" height="2" rx="1" fill="currentColor"/>
+          </svg>
+          List
         </button>
       </div>
-      <div class="reasoning-body" id="reasoningBody">
-        <div class="reasoning-stream" id="reasoningStream"></div>
+
+      <div class="chip-scroll" id="chipScroll"></div>
+
+      <button class="btn-merge" id="btnMerge" disabled>Merge</button>
+
+      <div class="zoom-wrap">
+        <button class="zoom-btn" id="btnZoomOut">-</button>
+        <span class="zoom-label" id="zoomLabel">100%</span>
+        <button class="zoom-btn" id="btnZoomIn">+</button>
       </div>
-      <div class="reasoning-footer">
-        <div class="reasoning-events" id="reasoningEvents"></div>
-        <div class="reasoning-stats">
-          <span class="reasoning-stat" id="reasoningTokens">0 tokens</span>
-          <span class="reasoning-stat-sep">·</span>
-          <span class="reasoning-stat" id="reasoningEventCount">0 events found</span>
+
+      <div class="density-wrap">
+        <span class="density-label">Min imp:</span>
+        <input type="range" id="densitySlider" min="1" max="10" value="1" step="1">
+        <span class="density-val" id="densityVal">1</span>
+      </div>
+
+      <label class="gap-toggle">
+        <input type="checkbox" id="gapToggle" checked>
+        Crop gaps
+      </label>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="content" id="content">
+
+      <!-- landing -->
+      <div class="landing" id="landing">
+        <div class="landing-title">Chrono<span>Weave</span></div>
+        <p class="landing-sub">AI-powered timeline research. Select a session or create one to begin.</p>
+      </div>
+
+      <!-- research loader overlay -->
+      <div class="research-loader hidden" id="researchLoader">
+        <div class="spinner"></div>
+        <div class="loader-title">Researching...</div>
+        <div class="loader-sub" id="loaderSub">Generating timeline</div>
+        <div class="loader-progress">
+          <div class="loader-progress-bar" id="loaderProgressBar"></div>
         </div>
       </div>
+
+      <!-- views (populated by JS) -->
+      <div id="viewContainer" style="flex:1;overflow:hidden;display:flex;flex-direction:column;"></div>
+
     </div>
   </div>
+</div>
 
-  <!-- Simple Loader (for merge/unmerge) -->
-  <div class="loader-bg hidden" id="loaderBg">
-    <div class="loader"><div class="loader-ring"></div><span id="loaderText">Processing...</span></div>
+<!-- Event detail modal -->
+<div class="modal-overlay hidden" id="modalBg">
+  <div class="modal-box" id="modalBox">
+    <button class="modal-close" id="modalClose">x</button>
+    <div class="modal-date" id="modalDate"></div>
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-desc" id="modalDesc"></div>
+    <div class="modal-meta" id="modalMeta"></div>
   </div>
+</div>
 
-  <script type="module" src="./js/main.js"></script>
+<script type="module" src="/js/main.js"></script>
 </body>
 </html>
