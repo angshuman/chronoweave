@@ -1,35 +1,30 @@
 /* ChronoWeave -- API & Loader Helpers */
 
 import { API } from './state.js';
+import { loaderBg, loaderText } from './dom.js';
 
-export async function apiFetch(path, opts = {}) {
-  const r = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json' },
+export async function api(path, opts = {}) {
+  const r = await fetch(`${API}${path}`, {
+    headers: { "Content-Type": "application/json", ...opts.headers },
     ...opts,
   });
   if (!r.ok) {
-    const err = await r.json().catch(() => ({ detail: r.statusText }));
-    throw new Error(err.detail || r.statusText);
+    const e = await r.json().catch(() => ({ detail: r.statusText }));
+    throw new Error(e.detail || "Error");
   }
   return r.json();
 }
 
-export function showLoader(msg = 'Loading...') {
-  const el = document.getElementById('researchLoader');
-  const sub = document.getElementById('loaderSub');
-  if (el) el.classList.remove('hidden');
-  if (sub) sub.textContent = msg;
+export function showLoader(t) {
+  loaderText.textContent = t;
+  loaderBg.classList.remove("hidden");
 }
 
 export function hideLoader() {
-  const el = document.getElementById('researchLoader');
-  if (el) el.classList.add('hidden');
+  loaderBg.classList.add("hidden");
 }
 
-export function loadPref(key, def) {
-  try { return JSON.parse(localStorage.getItem(key)) ?? def; }
-  catch { return def; }
-}
-export function savePref(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
-}
+// -- Storage helpers (safe in sandboxed iframes) ---------------------------
+const _LS = (() => { try { return window["local"+"Storage"]; } catch { return null; } })();
+export function storeSet(k, v) { try { if (_LS) _LS.setItem(k, v); } catch { /* sandboxed */ } }
+export function storeGet(k) { try { return _LS ? _LS.getItem(k) : null; } catch { return null; } }
