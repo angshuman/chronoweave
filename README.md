@@ -53,18 +53,45 @@ If multiple keys are set, priority is Anthropic > OpenAI > Grok. Override the mo
 
 ```
 chronoweave/
-├── public/            # Static frontend
+├── public/                    # Static frontend
 │   ├── index.html
-│   ├── app.js
-│   └── style.css
-├── api/               # Vercel serverless functions
-│   └── index.js       # Catch-all API handler
-├── lib/               # Shared business logic
-│   ├── db.js          # SQLite database layer
-│   ├── llm.js         # LLM helpers (Anthropic / OpenAI / Grok)
-│   └── routes.js      # Route handlers
-├── .env.example       # Template for local env vars
-├── server.js          # Express server (local dev)
+│   ├── css/                   # Modular stylesheets
+│   │   ├── themes.css         # Theme definitions (5 themes)
+│   │   ├── base.css           # Reset, tokens, shared atoms
+│   │   ├── layout.css         # App shell, sidebar, landing, topbar
+│   │   ├── controls.css       # View switch, chips, zoom, density
+│   │   ├── views.css          # List, vertical, horizontal views
+│   │   ├── modal.css          # Event detail modal + loader
+│   │   └── reasoning.css      # Research reasoning panel
+│   └── js/                    # Modular ES modules
+│       ├── main.js            # Entry point — wires events + init
+│       ├── state.js           # Global state, constants, colors
+│       ├── dom.js             # DOM element references
+│       ├── api.js             # Fetch helper, loader, localStorage
+│       ├── utils.js           # esc(), hexAlpha()
+│       ├── themes.js          # Theme switching
+│       ├── sessions.js        # Session + timeline CRUD, chips
+│       ├── research.js        # SSE streaming research
+│       ├── reasoning.js       # Reasoning panel UI logic
+│       ├── merge.js           # Merge/unmerge logic
+│       ├── render.js          # View dispatcher + event gathering
+│       ├── zoom.js            # Zoom controls
+│       ├── density.js         # Importance density filter
+│       ├── helpers.js         # Date parsing, importance scaling
+│       ├── gaps.js            # Gap detection + cropped mapping
+│       ├── modal.js           # Event detail modal
+│       └── views/
+│           ├── list.js        # List view renderer
+│           ├── vertical.js    # Vertical (linear) view renderer
+│           └── horizontal.js  # Horizontal view renderer
+├── api/                       # Vercel serverless functions
+│   └── index.js               # Catch-all API handler
+├── lib/                       # Shared backend logic
+│   ├── db.js                  # SQLite database layer
+│   ├── llm.js                 # Multi-provider LLM (Claude/GPT/Grok)
+│   └── routes.js              # Route handlers + SSE streaming
+├── .env.example
+├── server.js                  # Express server (local dev)
 ├── package.json
 ├── vercel.json
 └── README.md
