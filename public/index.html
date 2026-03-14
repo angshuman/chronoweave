@@ -22,7 +22,13 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
-<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="./css/themes.css">
+<link rel="stylesheet" href="./css/base.css">
+<link rel="stylesheet" href="./css/layout.css">
+<link rel="stylesheet" href="./css/controls.css">
+<link rel="stylesheet" href="./css/views.css">
+<link rel="stylesheet" href="./css/modal.css">
+<link rel="stylesheet" href="./css/reasoning.css">
 </head>
 <body>
   <div id="app">
@@ -127,11 +133,37 @@
     </div>
   </div>
 
-  <!-- Loader -->
-  <div class="loader-bg hidden" id="loaderBg">
-    <div class="loader"><div class="loader-ring"></div><span id="loaderText">Researching...</span></div>
+  <!-- Reasoning Panel -->
+  <div class="reasoning-overlay hidden" id="reasoningOverlay">
+    <div class="reasoning-panel">
+      <div class="reasoning-header">
+        <div class="reasoning-status">
+          <div class="reasoning-pulse" id="reasoningPulse"></div>
+          <span class="reasoning-phase" id="reasoningPhase">Initializing...</span>
+        </div>
+        <button class="reasoning-toggle" id="reasoningToggle" aria-label="Toggle detail">
+          <i data-lucide="chevron-down" style="width:16px;height:16px"></i>
+        </button>
+      </div>
+      <div class="reasoning-body" id="reasoningBody">
+        <div class="reasoning-stream" id="reasoningStream"></div>
+      </div>
+      <div class="reasoning-footer">
+        <div class="reasoning-events" id="reasoningEvents"></div>
+        <div class="reasoning-stats">
+          <span class="reasoning-stat" id="reasoningTokens">0 tokens</span>
+          <span class="reasoning-stat-sep">·</span>
+          <span class="reasoning-stat" id="reasoningEventCount">0 events found</span>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <script src="./app.js"></script>
+  <!-- Simple Loader (for merge/unmerge) -->
+  <div class="loader-bg hidden" id="loaderBg">
+    <div class="loader"><div class="loader-ring"></div><span id="loaderText">Processing...</span></div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
 </body>
 </html>
