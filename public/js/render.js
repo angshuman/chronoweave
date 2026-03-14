@@ -1,26 +1,44 @@
-/* ChronoWeave -- View Dispatcher */
+/* ChronoWeave -- Render View Dispatcher */
 
 import { S } from './state.js';
-import { gatherEvents, filterByImportance } from './helpers.js';
-import { viewContainer } from './dom.js';
+import { canvas } from './dom.js';
+import { renderListView } from './views/list.js';
+import { renderLinearView } from './views/vertical.js';
+import { renderHorizontalView } from './views/horizontal.js';
 
-export async function renderView() {
-  const events = filterByImportance(gatherEvents());
-  viewContainer.innerHTML = '';
-
-  if (!events.length) {
-    viewContainer.innerHTML = '<div class="empty-state"><p>No events to display. Research a topic above.</p></div>';
+export function renderView() {
+  canvas.innerHTML = "";
+  if (!S.timelines.length) {
+    canvas.innerHTML = '<div class="empty-note">Research a topic below to create your first timeline</div>';
     return;
   }
+  const allEvts = gatherEvents();
+  const filtered = S.minImportance > 0
+    ? allEvts.filter(e => (e.importance || 5) >= S.minImportance)
+    : allEvts;
+  const hiddenCount = allEvts.length - filtered.length;
 
-  if (S.view === 'list') {
-    const { renderList } = await import('./views/list.js');
-    renderList(events, viewContainer);
-  } else if (S.view === 'horizontal') {
-    const { renderHorizontal } = await import('./views/horizontal.js');
-    renderHorizontal(events, viewContainer);
-  } else {
-    const { renderVertical } = await import('./views/vertical.js');
-    renderVertical(events, viewContainer);
-  }
+  if (S.view === "list") renderListView(filtered, hiddenCount, canvas);
+  else if (S.view === "horizontal") renderHorizontalView(filtered, hiddenCount, allEvts, canvas);
+  else renderLinearView(filtered, hiddenCount, allEvts, canvas);
+}
+
+function gatherEvents() {
+  // Build set of timeline IDs that have been merged into another timeline
+  // so we don't double-count events from both the source and merged timelines
+  const mergedSourceIds = new Set();
+  S.timelines.forEach(tl => {
+    if (tl.is_merged && Array.isArray(tl.merged_from)) {
+      tl.merged_from.forEach(id => mergedSourceIds.add(id));
+    }
+  });
+
+  const all = [];
+  S.timelines.forEach(tl => {
+    // Skip source timelines whose events already exist in a merged timeline
+    if (mergedSourceIds.has(tl.id)) return;
+    (tl.events || []).forEach(e => all.push({ ...e, _tl: tl }));
+  });
+  all.sort((a, b) => (a.start_date || "").localeCompare(b.start_date || ""));
+  return all;
 }

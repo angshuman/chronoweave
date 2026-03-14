@@ -1,30 +1,23 @@
 /* ChronoWeave -- Zoom Controls */
 
-import { S } from './state.js';
+import { S, ZOOM_STEPS } from './state.js';
+import { zoomLevelEl } from './dom.js';
 import { renderView } from './render.js';
 
-const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 3.0;
-const STEP = 0.25;
-
-export function initZoom() {
-  const btnIn  = document.getElementById('btnZoomIn');
-  const btnOut = document.getElementById('btnZoomOut');
-  const label  = document.getElementById('zoomLabel');
-  if (!btnIn) return;
-
-  btnIn.addEventListener('click', () => adjust(STEP));
-  btnOut.addEventListener('click', () => adjust(-STEP));
-
-  document.addEventListener('wheel', (e) => {
-    if (!e.ctrlKey) return;
-    e.preventDefault();
-    adjust(e.deltaY < 0 ? STEP : -STEP);
-  }, { passive: false });
-
-  function adjust(delta) {
-    S.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, S.zoom + delta));
-    label.textContent = Math.round(S.zoom * 100) + '%';
-    renderView();
-  }
+export function setZoom(z) {
+  S.zoom = Math.max(0.15, Math.min(5, z));
+  zoomLevelEl.textContent = Math.round(S.zoom * 100) + "%";
+  renderView();
 }
+
+export function zoomIn() {
+  const next = ZOOM_STEPS.find(s => s > S.zoom + 0.01);
+  setZoom(next || S.zoom);
+}
+
+export function zoomOut() {
+  const prev = [...ZOOM_STEPS].reverse().find(s => s < S.zoom - 0.01);
+  setZoom(prev || S.zoom);
+}
+
+export function zoomFit() { setZoom(1.0); }

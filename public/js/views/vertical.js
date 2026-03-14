@@ -1,178 +1,231 @@
-/* ChronoWeave -- Vertical View Renderer */
+/* ChronoWeave -- Vertical (Linear Proportional) View */
 
-import { S } from '../state.js';
-import { parseDate, formatDate, formatDateRange, impScale, impOpacity, impGlow, eventColor, parseTags } from '../helpers.js';
-import { buildCroppedMap } from '../gaps.js';
+import { S, GAP_BREAK_SVG } from '../state.js';
+import { canvasWrap } from '../dom.js';
+import { esc } from '../utils.js';
+import { parseDate, fmtDateRange, evtColor, impScale, getYearStep } from '../helpers.js';
+import { detectGaps, buildGapCroppedMapping } from '../gaps.js';
 import { openModal } from '../modal.js';
-import { hexAlpha } from '../utils.js';
 
-export function renderVertical(events, container) {
-  const wrap = document.createElement('div');
-  wrap.className = 'vertical-view';
-  container.appendChild(wrap);
+export function renderLinearView(events, hiddenCount, allEvts, canvas) {
+  if (!events.length) {
+    canvas.innerHTML = '<div class="empty-note">No events to display</div>';
+    return;
+  }
 
-  const axis = document.createElement('div');
-  axis.className = 'v-axis';
+  const wrap = document.createElement("div");
+  wrap.className = "linear-view";
+
+  const parsed = events.map(e => ({
+    ...e,
+    _start: parseDate(e.start_date),
+    _end: e.end_date ? parseDate(e.end_date) : null,
+  })).filter(e => e._start);
+
+  if (!parsed.length) {
+    canvas.innerHTML = '<div class="empty-note">No valid dates found</div>';
+    return;
+  }
+
+  parsed.sort((a, b) => a._start - b._start);
+
+  const minTs = Math.min(...parsed.map(e => e._start));
+  const maxTs = Math.max(...parsed.map(e => e._end || e._start));
+  const span = maxTs - minTs || 1;
+
+  const containerW = canvasWrap.clientWidth - 40;
+  const AXIS_X = Math.round(containerW * 0.42);
+  const CONN_LEN = 28;
+  const TEXT_GAP = 6;
+  const RIGHT_W = Math.min(containerW - AXIS_X - CONN_LEN - TEXT_GAP - 16, 440);
+  const LEFT_W = Math.min(AXIS_X - CONN_LEN - TEXT_GAP - 16, 440);
+  const MIN_Y_GAP = 44;
+
+  const totalYearsRaw = span / (365.25 * 24 * 3600 * 1000);
+  const basePxYear = totalYearsRaw > 30 ? 25 : totalYearsRaw > 10 ? 40 : 55;
+  const PX_PER_YEAR = basePxYear * S.zoom;
+  const basePxPerMs = PX_PER_YEAR / (365.25 * 24 * 3600 * 1000);
+
+  const gaps = detectGaps(parsed);
+  const mapping = buildGapCroppedMapping(parsed, gaps, basePxPerMs, 30);
+
+  function yPos(ts) { return mapping.posFunc(ts); }
+
+  // Axis
+  const axis = document.createElement("div");
+  axis.className = "linear-axis";
+  axis.style.left = AXIS_X + "px";
   wrap.appendChild(axis);
 
-  // spine
-  const spine = document.createElement('div');
-  spine.className = 'v-spine';
-  axis.appendChild(spine);
+  // Year labels
+  const minYear = new Date(minTs).getFullYear();
+  const maxYear = new Date(maxTs).getFullYear();
+  const yearStep = getYearStep(maxYear - minYear, S.zoom);
+  const majorStart = Math.floor(minYear / yearStep) * yearStep;
+  const minorStep = Math.max(1, Math.floor(yearStep / 2));
+  const majorYearSet = new Set();
+  for (let y = majorStart; y <= maxYear + yearStep; y += yearStep) majorYearSet.add(y);
 
-  if (!events.length) return;
+  for (let y = majorStart; y <= maxYear + yearStep; y += (minorStep < yearStep ? minorStep : 1)) {
+    if (y < minYear || y > maxYear) continue;
+    const ts = new Date(y, 0, 1).getTime();
+    if (ts < minTs || ts > maxTs) continue;
+    const top = yPos(ts);
+    const inGap = gaps.some(g => ts > g.startTs && ts < g.endTs);
+    if (inGap) continue;
+    const isMajor = majorYearSet.has(y);
+    if (isMajor) {
+      const lbl = document.createElement("div");
+      lbl.className = "linear-year-label";
+      lbl.style.top = top + "px";
+      lbl.style.left = (AXIS_X - 52) + "px";
+      lbl.style.width = "44px";
+      lbl.textContent = y;
+      wrap.appendChild(lbl);
+      const tick = document.createElement("div");
+      tick.className = "linear-year-tick";
+      tick.style.top = top + "px";
+      tick.style.left = (AXIS_X - 6) + "px";
+      wrap.appendChild(tick);
+    } else if (minorStep < yearStep) {
+      const tick = document.createElement("div");
+      tick.className = "linear-year-tick-minor";
+      tick.style.top = top + "px";
+      tick.style.left = (AXIS_X - 3) + "px";
+      wrap.appendChild(tick);
+    }
+    if (minorStep >= yearStep) y += yearStep - 1;
+  }
 
-  // Collect sorted dates
-  const allDates = events
-    .map(e => parseDate(e.start_date)?.getTime())
-    .filter(Boolean);
-
-  // Build cropped height map
-  const CONTAINER_H = 10000; // large virtual height
-  const { mapTime, gaps } = S.gapCrop
-    ? buildCroppedMap(allDates, {
-        thresholdMs: 1000 * 60 * 60 * 24 * 365 * 3,
-        containerW: CONTAINER_H,
-        paddingPx: 40,
-        gapWidthPx: 60,
-      })
-    : {
-        mapTime: buildLinearMap(allDates, CONTAINER_H),
-        gaps: [],
-      };
-
-  // Track gap break insertions (by position)
-  const gapBreaks = new Map();
-  gaps.forEach(g => gapBreaks.set(g.start, g));
-
-  // Sort events by start_date
-  const sorted = [...events].sort((a, b) => {
-    const da = parseDate(a.start_date), db = parseDate(b.start_date);
-    if (!da && !db) return 0; if (!da) return 1; if (!db) return -1;
-    return da - db;
+  // Gap breaks
+  mapping.gapBreaks.forEach(gb => {
+    const br = document.createElement("div");
+    br.className = "gap-break";
+    br.style.top = gb.pos + "px";
+    br.style.left = (AXIS_X - 6) + "px";
+    br.innerHTML = `<div class="gap-break-line">${GAP_BREAK_SVG}${GAP_BREAK_SVG}</div><span class="gap-break-label">${gb.label}</span>`;
+    wrap.appendChild(br);
   });
 
-  // Assign vertical positions using gap-cropped map
-  const positioned = sorted.map(ev => {
-    const d = parseDate(ev.start_date);
-    const y = d ? mapTime(d.getTime()) : 0;
-    return { ev, y };
+  // Build items with y positions
+  const items = parsed.map((e, i) => {
+    const y = yPos(e._start);
+    const yEnd = e._end ? yPos(e._end) : y;
+    const imp = e.importance || 5;
+    return { evt: e, y, yEnd, imp, idx: i, side: 0, adjustedY: y };
   });
 
-  // Determine total height
-  const maxY = Math.max(...positioned.map(p => p.y), 200);
-  axis.style.height = (maxY + 80) + 'px';
-  spine.style.height = maxY + 'px';
+  items.sort((a, b) => a.y - b.y);
 
-  // Insert gap break elements
-  gaps.forEach(g => {
-    const breakY = g.xStart; // xStart is used as Y in vertical orientation
-    const brk = document.createElement('div');
-    brk.className = 'v-gap-break';
-    brk.style.position = 'absolute';
-    brk.style.top = breakY + 'px';
-    brk.style.left = '0';
-    brk.style.right = '0';
-    const lbl = document.createElement('div');
-    lbl.className = 'v-gap-label';
-    lbl.textContent = g.label;
-    brk.appendChild(lbl);
-    axis.appendChild(brk);
+  // Assign sides: alternate
+  items.forEach((item, i) => {
+    item.side = (i % 2 === 0) ? 1 : -1;
   });
 
-  // Render events
-  positioned.forEach(({ ev, y }, idx) => {
-    const side = idx % 2 === 0 ? 'left' : 'right';
-    const color = eventColor(ev);
-    const scale = impScale(ev.importance);
-    const opacity = impOpacity(ev.importance);
-    const glow = impGlow(ev.importance);
-    const tags = parseTags(ev.tags);
+  // De-overlap per side independently
+  const rightItems = items.filter(it => it.side === 1).sort((a, b) => a.y - b.y);
+  const leftItems = items.filter(it => it.side === -1).sort((a, b) => a.y - b.y);
 
-    const entry = document.createElement('div');
-    entry.className = `v-entry ${side}`;
-    entry.style.position = 'absolute';
-    entry.style.top = y + 'px';
-    entry.style.left = '0';
-    entry.style.right = '0';
-    entry.style.transform = `scale(${scale})`;
-    entry.style.transformOrigin = side === 'left' ? 'right center' : 'left center';
+  function deOverlapSide(arr) {
+    for (let i = 1; i < arr.length; i++) {
+      if (arr[i].adjustedY - arr[i - 1].adjustedY < MIN_Y_GAP) {
+        arr[i].adjustedY = arr[i - 1].adjustedY + MIN_Y_GAP;
+      }
+    }
+  }
+  deOverlapSide(rightItems);
+  deOverlapSide(leftItems);
 
-    // Date column
-    const dateCol = document.createElement('div');
-    dateCol.className = 'v-date-col';
-    dateCol.innerHTML = `<div class="v-date">${formatDateRange(ev.start_date, ev.end_date, ev.date_precision)}</div>`;
+  // Render nodes
+  items.forEach((item, i) => {
+    const { evt, y, yEnd, imp, side, adjustedY } = item;
+    const col = evtColor(evt);
+    const sc = impScale(imp);
+    const isDuration = evt._end && evt._end !== evt._start;
+    const textW = side > 0 ? RIGHT_W : LEFT_W;
 
-    // Dot
-    const dot = document.createElement('div');
-    dot.className = 'v-dot';
-    dot.style.background = color;
-    dot.style.borderColor = 'var(--bg)';
-    if (glow > 0.3) dot.style.boxShadow = `0 0 ${Math.round(glow * 10)}px ${color}`;
+    const node = document.createElement("div");
+    node.className = "tl-node";
+    node.style.animationDelay = `${Math.min(i * 20, 400)}ms`;
 
-    // Card
-    const cardCol = document.createElement('div');
-    cardCol.className = 'v-card-col';
+    // Dot on axis
+    const dot = document.createElement("div");
+    dot.className = "tl-dot" + (sc.glow ? " glow" : "");
+    dot.style.background = col;
+    dot.style.width = sc.dotSize + "px";
+    dot.style.height = sc.dotSize + "px";
+    dot.style.left = AXIS_X + "px";
+    dot.style.top = y + "px";
+    node.appendChild(dot);
 
-    const card = document.createElement('div');
-    card.className = 'v-card';
-    card.style.borderColor = color;
-    card.style.opacity = String(opacity);
-    if (glow > 0.4) {
-      card.style.boxShadow = `0 0 ${Math.round(glow * 14)}px ${hexAlpha(color, glow * 0.4)}`;
+    // Duration range bar
+    if (isDuration && yEnd > y) {
+      const range = document.createElement("div");
+      range.className = "tl-range";
+      range.style.background = col;
+      range.style.top = y + "px";
+      range.style.left = (AXIS_X - 1) + "px";
+      range.style.height = Math.max(yEnd - y, 4) + "px";
+      node.appendChild(range);
     }
 
-    const titleEl = document.createElement('div');
-    titleEl.className = 'v-title';
-    titleEl.textContent = ev.title;
-
-    const descEl = document.createElement('div');
-    descEl.className = 'v-desc';
-    descEl.textContent = ev.description || '';
-
-    card.appendChild(titleEl);
-    card.appendChild(descEl);
-
-    if (tags.length) {
-      const tagsEl = document.createElement('div');
-      tagsEl.className = 'v-tags';
-      tags.forEach(t => {
-        const span = document.createElement('span');
-        span.className = 'v-tag';
-        span.textContent = t;
-        tagsEl.appendChild(span);
-      });
-      card.appendChild(tagsEl);
-    }
-
-    if (ev.end_date) {
-      const bar = document.createElement('div');
-      bar.className = 'v-duration-bar';
-      bar.style.background = color;
-      card.appendChild(bar);
-    }
-
-    card.addEventListener('click', () => openModal(ev));
-    cardCol.appendChild(card);
-
-    if (side === 'left') {
-      entry.appendChild(cardCol);
-      entry.appendChild(dot);
-      entry.appendChild(dateCol);
+    // Connector line
+    const conn = document.createElement("div");
+    conn.className = "tl-conn";
+    conn.style.background = col;
+    const connTop = adjustedY;
+    if (side > 0) {
+      conn.style.left = (AXIS_X + 2) + "px";
+      conn.style.width = CONN_LEN + "px";
     } else {
-      entry.appendChild(dateCol);
-      entry.appendChild(dot);
-      entry.appendChild(cardCol);
+      conn.style.left = (AXIS_X - CONN_LEN - 2) + "px";
+      conn.style.width = CONN_LEN + "px";
+    }
+    conn.style.top = connTop + "px";
+    node.appendChild(conn);
+
+    // Vertical joiner if label was pushed
+    if (Math.abs(adjustedY - y) > 2) {
+      const joiner = document.createElement("div");
+      joiner.className = "tl-conn";
+      joiner.style.background = col;
+      joiner.style.width = "1px";
+      joiner.style.height = Math.abs(adjustedY - y) + "px";
+      joiner.style.top = Math.min(y, adjustedY) + "px";
+      joiner.style.left = (side > 0 ? AXIS_X + 2 : AXIS_X - 2) + "px";
+      node.appendChild(joiner);
     }
 
-    axis.appendChild(entry);
-  });
-}
+    // Text label
+    const text = document.createElement("div");
+    text.className = "tl-text";
+    text.style.top = connTop + "px";
+    text.style.transform = "translateY(-50%)";
+    text.style.opacity = sc.opacity;
+    text.style.width = Math.max(textW, 120) + "px";
+    text.style.maxWidth = Math.max(textW, 120) + "px";
+    if (side > 0) {
+      text.style.left = (AXIS_X + CONN_LEN + TEXT_GAP) + "px";
+    } else {
+      const leftEdge = AXIS_X - CONN_LEN - TEXT_GAP - Math.max(textW, 120);
+      text.style.left = Math.max(4, leftEdge) + "px";
+      text.style.textAlign = "right";
+    }
 
-function buildLinearMap(dates, containerH, paddingPx = 40) {
-  if (!dates.length) return () => paddingPx;
-  const min = Math.min(...dates);
-  const max = Math.max(...dates);
-  const span = max - min || 1;
-  return (t) => paddingPx + ((t - min) / span) * (containerH - paddingPx * 2);
+    const dateStr = fmtDateRange(evt);
+    text.innerHTML = `
+      <div class="tl-title" style="font-size:${sc.titleSize}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</div>
+      <div class="tl-sub"><span class="tl-date-inline">${dateStr}</span> ${esc(evt.description || "")}</div>
+    `;
+    node.appendChild(text);
+
+    node.addEventListener("click", () => openModal(evt));
+    wrap.appendChild(node);
+  });
+
+  const maxBottom = items.length ? Math.max(...items.map(it => it.adjustedY + 40), ...items.map(it => it.yEnd + 40)) : 400;
+  wrap.style.height = Math.max(400, maxBottom + 60) + "px";
+  wrap.style.minWidth = (AXIS_X + CONN_LEN + 200) + "px";
+
+  canvas.appendChild(wrap);
 }

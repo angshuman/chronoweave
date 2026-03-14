@@ -1,65 +1,95 @@
 /* ChronoWeave -- Reasoning Panel Logic */
 
 import {
-  reasoningPanel, reasoningText, reasoningStatus,
-  reasoningProgressBar, reasoningSpinner, btnReasoningToggle,
+  reasoningOverlay, reasoningPulse, reasoningPhase,
+  reasoningStream, reasoningEvents, reasoningTokens,
+  reasoningEventCount, reasoningBody, reasoningToggle,
 } from './dom.js';
+import { esc } from './utils.js';
 
-let _open = false;
+let _reasoningTokenCount = 0;
+let _reasoningEvCount = 0;
 
-export function initReasoning() {
-  if (!btnReasoningToggle) return;
-  btnReasoningToggle.addEventListener('click', () => {
-    _open = !_open;
-    reasoningPanel.classList.toggle('open', _open);
-    btnReasoningToggle.classList.toggle('open', _open);
-  });
+export function showReasoning() {
+  reasoningOverlay.classList.remove("hidden");
+  reasoningPulse.className = "reasoning-pulse";
+  reasoningPhase.textContent = "Connecting...";
+  reasoningStream.textContent = "";
+  reasoningEvents.innerHTML = "";
+  reasoningTokens.textContent = "0 tokens";
+  reasoningEventCount.textContent = "0 events";
+  reasoningBody.classList.remove("collapsed");
+  reasoningToggle.classList.remove("collapsed");
+  _reasoningTokenCount = 0;
+  _reasoningEvCount = 0;
+  lucide.createIcons({ nodes: [reasoningOverlay] });
 }
 
-export function reasoningStart() {
-  if (!reasoningText) return;
-  reasoningText.textContent = '';
-  reasoningProgressBar.style.width = '0%';
-  reasoningStatus.textContent = 'Researching...';
-  reasoningSpinner.style.display = 'inline-block';
-
-  // Auto-show panel
-  _open = true;
-  reasoningPanel.classList.add('open');
-  btnReasoningToggle.classList.remove('hidden');
-  btnReasoningToggle.classList.add('open');
+export function hideReasoning() {
+  reasoningOverlay.classList.add("hidden");
 }
 
-export function reasoningToken(text) {
-  if (!reasoningText) return;
-  reasoningText.textContent += text;
-  // Auto-scroll
-  const scroll = reasoningText.closest('.reasoning-scroll');
-  if (scroll) scroll.scrollTop = scroll.scrollHeight;
-
-  // Animate progress bar heuristically
-  const cur = parseFloat(reasoningProgressBar.style.width) || 0;
-  if (cur < 90) {
-    reasoningProgressBar.style.width = Math.min(cur + 0.5, 90) + '%';
+export function appendToken(text) {
+  let cursor = reasoningStream.querySelector(".token-cursor");
+  if (cursor) cursor.remove();
+  reasoningStream.appendChild(document.createTextNode(text));
+  cursor = document.createElement("span");
+  cursor.className = "token-cursor";
+  reasoningStream.appendChild(cursor);
+  reasoningBody.scrollTop = reasoningBody.scrollHeight;
+  _reasoningTokenCount++;
+  if (_reasoningTokenCount % 5 === 0) {
+    reasoningTokens.textContent = _reasoningTokenCount + " tokens";
   }
 }
 
-export function reasoningDone() {
-  if (!reasoningText) return;
-  reasoningProgressBar.style.width = '100%';
-  reasoningStatus.textContent = 'Done';
-  reasoningSpinner.style.display = 'none';
+export function addEventPill(idx, title) {
+  _reasoningEvCount = idx;
+  reasoningEventCount.textContent = idx + " event" + (idx !== 1 ? "s" : "");
+  const pill = document.createElement("span");
+  pill.className = "reasoning-ev-pill";
+  pill.innerHTML = `<span class="pill-num">${idx}</span>${esc(title)}`;
+  reasoningEvents.appendChild(pill);
+  reasoningEvents.scrollTop = reasoningEvents.scrollHeight;
+}
 
-  // Collapse after 3s
-  setTimeout(() => {
-    _open = false;
-    reasoningPanel.classList.remove('open');
-    btnReasoningToggle.classList.remove('open');
-  }, 3000);
+export function finalizeReasoning() {
+  reasoningTokens.textContent = _reasoningTokenCount + " tokens";
+  reasoningEventCount.textContent = _reasoningEvCount + " events";
+  const cursor = reasoningStream.querySelector(".token-cursor");
+  if (cursor) cursor.remove();
+  reasoningPulse.classList.add("done");
+  reasoningPhase.textContent = "Timeline ready";
 }
 
 export function reasoningError(msg) {
-  if (!reasoningStatus) return;
-  reasoningStatus.textContent = 'Error: ' + msg;
-  reasoningSpinner.style.display = 'none';
+  const cursor = reasoningStream.querySelector(".token-cursor");
+  if (cursor) cursor.remove();
+  reasoningPulse.classList.add("error");
+  reasoningPhase.textContent = "Error: " + msg;
+  reasoningOverlay.addEventListener("click", function dismiss(ev) {
+    if (ev.target === reasoningOverlay) {
+      hideReasoning();
+      reasoningOverlay.removeEventListener("click", dismiss);
+    }
+  });
 }
+
+export function reasoningConnectionLost() {
+  const cursor = reasoningStream.querySelector(".token-cursor");
+  if (cursor) cursor.remove();
+  reasoningPulse.classList.add("error");
+  reasoningPhase.textContent = "Connection lost";
+  reasoningOverlay.addEventListener("click", function dismiss(ev) {
+    if (ev.target === reasoningOverlay) {
+      hideReasoning();
+      reasoningOverlay.removeEventListener("click", dismiss);
+    }
+  });
+}
+
+// Toggle binding
+reasoningToggle.addEventListener("click", () => {
+  reasoningBody.classList.toggle("collapsed");
+  reasoningToggle.classList.toggle("collapsed");
+});
