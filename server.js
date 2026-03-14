@@ -21,10 +21,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ── Static frontend ───────────────────────────────────────────────────────
+// ── Static frontend ─────────────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, "public")));
 
-// ── API routes ────────────────────────────────────────────────────────────
+// ── API routes ────────────────────────────────────────────────────────────────
 
 // Sessions
 app.get("/api/sessions", (_req, res) => {
@@ -49,13 +49,47 @@ app.get("/api/sessions/:sid/timelines", (req, res) => {
   res.json(routes.listTimelines(req.params.sid));
 });
 
-// Research
+// Research (non-streaming fallback)
 app.post("/api/research", async (req, res) => {
   try {
     const tl = await routes.researchTopic(req.body);
     res.json(tl);
   } catch (err) {
     res.status(err.status || 500).json({ detail: err.message });
+  }
+});
+
+// Research (SSE streaming)
+app.get("/api/research/stream", async (req, res) => {
+  const { session_id, query, color } = req.query;
+  if (!session_id || !query) {
+    return res.status(400).json({ detail: "session_id and query required" });
+  }
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const send = (type, data) => {
+    res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    await routes.researchTopicStream(
+      { session_id, query, color },
+      (type, data) => {
+        if (!res.writableEnded) send(type, data);
+      }
+    );
+  } catch (err) {
+    if (!res.writableEnded) send("error", { message: err.message });
+  }
+  if (!res.writableEnded) {
+    res.write("event: done\ndata: {}\n\n");
+    res.end();
   }
 });
 
