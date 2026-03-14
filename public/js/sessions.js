@@ -1,113 +1,197 @@
-/* ChronoWeave — Sessions & Timelines */
+/* ChronoWeave -- Session & Timeline Management */
 
 import { S } from './state.js';
-import { sessionNav, topbarTitle, landing, sessionView, chipsBar, mergeBtn, sidebar } from './dom.js';
-import { api, showLoader, hideLoader } from './api.js';
-import { esc, hexAlpha } from './utils.js';
+import { apiFetch, savePref } from './api.js';
 import { renderView } from './render.js';
-import { resetColorIdx } from './state.js';
+import {
+  sessionList, btnNewSession, topbarTitle,
+  controlsBar, landing, chipScroll, btnMerge,
+} from './dom.js';
 
-// Lazy reference to doResearch — set via setResearchFn to break circular dep
-let _doResearch = null;
-export function setResearchFn(fn) { _doResearch = fn; }
+// ---- Session list --------------------------------------------------------
 
-// ── Sessions ───────────────────────────────────────────────────────────────────────
-
-export async function loadSessions() {
-  S.sessions = await api("/api/sessions");
-  renderSessions();
+export async function initSessions() {
+  btnNewSession.addEventListener('click', createSession);
+  await refreshSessions();
 }
 
-export function renderSessions() {
-  sessionNav.innerHTML = "";
-  if (!S.sessions.length) {
-    sessionNav.innerHTML = '<div class="empty-note" style="padding:20px;font-size:12px">No threads yet</div>';
-    return;
-  }
-  S.sessions.forEach(s => {
-    const el = document.createElement("div");
-    el.className = `nav-item${s.id === S.activeId ? " active" : ""}`;
-    el.innerHTML = `<span class="nav-name">${esc(s.name)}</span><span class="nav-count">${s.timeline_count || 0}</span><button class="nav-del" data-id="${s.id}" aria-label="Delete"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>`;
-    el.addEventListener("click", e => { if (e.target.closest(".nav-del")) return; selectSession(s.id); });
-    el.querySelector(".nav-del").addEventListener("click", async e => {
-      e.stopPropagation();
-      await api(`/api/sessions/${s.id}`, { method: "DELETE" });
-      if (S.activeId === s.id) { S.activeId = null; S.timelines = []; showLanding(); }
-      await loadSessions();
+async function refreshSessions() {
+  const sessions = await apiFetch('/api/sessions');
+  renderSessionList(sessions);
+}
+
+function renderSessionList(sessions) {
+  sessionList.innerHTML = '';
+  sessions.forEach(s => {
+    const item = document.createElement('div');
+    item.className = 'session-item' + (s.id === S.sessionId ? ' active' : '');
+    item.dataset.id = s.id;
+    item.innerHTML = `
+      <span class="session-name" title="${esc(s.name)}">${esc(s.name)}</span>
+      <span class="session-count">${s.timeline_count || 0}</span>
+      <button class="session-del" title="Delete session" data-id="${s.id}">x</button>
+    `;
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.session-del')) return;
+      loadSession(s.id);
     });
-    sessionNav.appendChild(el);
+    // Double-click to rename
+    item.querySelector('.session-name').addEventListener('dblclick', () => startRename(item, s));
+    // Delete
+    item.querySelector('.session-del').addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteSession(s.id);
+    });
+    sessionList.appendChild(item);
   });
-  lucide.createIcons({ nodes: [sessionNav] });
 }
 
-export async function createSession(initialQuery) {
-  const name = initialQuery ? initialQuery.slice(0, 50) : `Thread ${S.sessions.length + 1}`;
-  const s = await api("/api/sessions", { method: "POST", body: JSON.stringify({ name }) });
-  await loadSessions();
-  await selectSession(s.id);
-  if (initialQuery && _doResearch) await _doResearch(initialQuery);
+async function createSession() {
+  const s = await apiFetch('/api/sessions', { method: 'POST', body: JSON.stringify({ name: 'New Session' }) });
+  await refreshSessions();
+  loadSession(s.id);
 }
 
-export async function selectSession(id) {
-  S.activeId = id;
-  S.selected.clear();
-  resetColorIdx();
-  const sess = S.sessions.find(s => s.id === id);
-  topbarTitle.textContent = sess ? sess.name : "Thread";
-  landing.classList.add("hidden");
-  sessionView.classList.remove("hidden");
-  await loadTimelines();
-  renderSessions();
-  sidebar.classList.remove("open");
+async function deleteSession(id) {
+  await apiFetch(`/api/sessions/${id}`, { method: 'DELETE' });
+  if (S.sessionId === id) {
+    S.sessionId = null;
+    S.timelines = [];
+    S.visibleTimelines = [];
+    S.selectedTimelines = new Set();
+    topbarTitle.textContent = 'ChronoWeave';
+    controlsBar.classList.add('hidden');
+    landing.classList.remove('hidden');
+    chipScroll.innerHTML = '';
+  }
+  await refreshSessions();
 }
 
-export function showLanding() {
-  landing.classList.remove("hidden");
-  sessionView.classList.add("hidden");
+function startRename(item, session) {
+  const nameSpan = item.querySelector('.session-name');
+  const input = document.createElement('input');
+  input.className = 'session-name-input';
+  input.value = session.name;
+  item.replaceChild(input, nameSpan);
+  input.focus();
+  input.select();
+
+  const finish = async () => {
+    const newName = input.value.trim() || session.name;
+    await apiFetch(`/api/sessions/${session.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name: newName }),
+    });
+    await refreshSessions();
+    if (S.sessionId === session.id) topbarTitle.textContent = newName;
+  };
+  input.addEventListener('blur', finish);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
 }
 
-// ── Timelines ───────────────────────────────────────────────────────────────────────
+// ---- Load session --------------------------------------------------------
 
-export async function loadTimelines() {
-  if (!S.activeId) return;
-  S.timelines = await api(`/api/sessions/${S.activeId}/timelines`);
+export async function loadSession(id) {
+  S.sessionId = id;
+  S.timelines = [];
+  S.visibleTimelines = [];
+  S.selectedTimelines = new Set();
+  savePref('lastSession', id);
+
+  // Mark active in sidebar
+  document.querySelectorAll('.session-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.id === id);
+  });
+
+  const sessions = await apiFetch('/api/sessions');
+  const sess = sessions.find(s => s.id === id);
+  if (sess) topbarTitle.textContent = sess.name;
+
+  const timelines = await apiFetch(`/api/sessions/${id}/timelines`);
+  S.timelines = timelines;
+  S.visibleTimelines = timelines.map(t => t.id);
+
+  if (timelines.length) {
+    controlsBar.classList.remove('hidden');
+    landing.classList.add('hidden');
+  } else {
+    controlsBar.classList.add('hidden');
+    landing.classList.remove('hidden');
+  }
+
   renderChips();
   renderView();
 }
 
+// ---- Chips ---------------------------------------------------------------
+
 export function renderChips() {
-  chipsBar.innerHTML = "";
+  chipScroll.innerHTML = '';
   S.timelines.forEach(tl => {
-    const sel = S.selected.has(tl.id);
-    const ch = document.createElement("div");
-    ch.className = `chip${sel ? " selected" : ""}`;
-    ch.style.background = sel ? "" : hexAlpha(tl.color, 0.12);
-    ch.style.color = tl.color;
-    let extra = "";
-    if (tl.is_merged) extra = '<span class="chip-badge">merged</span>';
-    ch.innerHTML = `<span class="cdot" style="background:${tl.color}"></span><span>${esc(tl.name)}</span>${extra}${tl.is_merged ? `<button class="chip-act" data-act="unmerge" data-id="${tl.id}"><i data-lucide="split" style="width:10px;height:10px"></i></button>` : ""}<button class="chip-act" data-act="del" data-id="${tl.id}"><i data-lucide="x" style="width:10px;height:10px"></i></button>`;
-    ch.addEventListener("click", e => { if (e.target.closest("[data-act]")) return; toggleSelect(tl.id); });
-    ch.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", async e => {
-      e.stopPropagation();
-      if (b.dataset.act === "del") {
-        await api(`/api/timelines/${b.dataset.id}`, { method: "DELETE" });
-        S.selected.delete(b.dataset.id);
-        await loadTimelines();
-      } else if (b.dataset.act === "unmerge") {
-        showLoader("Unmerging...");
-        await api("/api/unmerge", { method: "POST", body: JSON.stringify({ timeline_id: b.dataset.id }) });
-        S.selected.delete(b.dataset.id);
-        hideLoader();
-        await loadTimelines();
+    const chip = document.createElement('div');
+    chip.className = 'chip' +
+      (S.visibleTimelines.includes(tl.id) ? '' : ' dim') +
+      (S.selectedTimelines.has(tl.id) ? ' selected' : '') +
+      (tl.is_merged ? ' merged-chip' : '');
+    chip.dataset.id = tl.id;
+    chip.innerHTML = `
+      <span class="dot" style="background:${tl.color}"></span>
+      <span class="truncate" title="${esc(tl.name)}">${esc(tl.name)}</span>
+      <span class="chip-del" title="Remove timeline">x</span>
+    `;
+    // Toggle visibility
+    chip.addEventListener('click', (e) => {
+      if (e.target.closest('.chip-del')) return;
+      // Ctrl/Cmd = select for merge
+      if (e.ctrlKey || e.metaKey) {
+        if (S.selectedTimelines.has(tl.id)) S.selectedTimelines.delete(tl.id);
+        else S.selectedTimelines.add(tl.id);
+        updateMergeBtn();
+        renderChips();
+        return;
       }
-    }));
-    chipsBar.appendChild(ch);
+      // Toggle visibility
+      const idx = S.visibleTimelines.indexOf(tl.id);
+      if (idx >= 0) S.visibleTimelines.splice(idx, 1);
+      else S.visibleTimelines.push(tl.id);
+      renderChips();
+      renderView();
+    });
+    // Delete timeline
+    chip.querySelector('.chip-del').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (tl.is_merged) {
+        // Unmerge
+        await apiFetch('/api/unmerge', { method: 'POST', body: JSON.stringify({ timeline_id: tl.id }) });
+      } else {
+        await apiFetch(`/api/timelines/${tl.id}`, { method: 'DELETE' });
+      }
+      S.timelines = S.timelines.filter(t => t.id !== tl.id);
+      S.visibleTimelines = S.visibleTimelines.filter(id => id !== tl.id);
+      S.selectedTimelines.delete(tl.id);
+      renderChips();
+      renderView();
+    });
+    chipScroll.appendChild(chip);
   });
-  lucide.createIcons({ nodes: [chipsBar] });
-  mergeBtn.disabled = S.selected.size < 2;
+  updateMergeBtn();
 }
 
-function toggleSelect(id) {
-  S.selected.has(id) ? S.selected.delete(id) : S.selected.add(id);
-  renderChips();
+function updateMergeBtn() {
+  const sel = [...S.selectedTimelines];
+  const hasMerged = sel.some(id => S.timelines.find(t => t.id === id)?.is_merged);
+  if (sel.length === 1 && hasMerged) {
+    btnMerge.textContent = 'Unmerge';
+    btnMerge.disabled = false;
+  } else if (sel.length >= 2 && !hasMerged) {
+    btnMerge.textContent = 'Merge';
+    btnMerge.disabled = false;
+  } else {
+    btnMerge.textContent = 'Merge';
+    btnMerge.disabled = true;
+  }
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }

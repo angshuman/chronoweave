@@ -1,40 +1,51 @@
-/* ChronoWeave — List View */
+/* ChronoWeave -- List View Renderer */
 
-import { esc } from '../utils.js';
-import { evtColor, impScale, fmtDateRange } from '../helpers.js';
+import { formatDate, formatDateRange, impOpacity, eventColor, parseTags, sourceLabel } from '../helpers.js';
 import { openModal } from '../modal.js';
 
-export function renderListView(events, hiddenCount, canvas) {
-  const wrap = document.createElement("div");
-  wrap.className = "list-view";
+export function renderList(events, container) {
+  const wrap = document.createElement('div');
+  wrap.className = 'list-view';
 
-  if (hiddenCount > 0) {
-    const note = document.createElement("div");
-    note.className = "empty-note";
-    note.style.cssText = "padding:8px 0;font-size:11px";
-    note.textContent = `${hiddenCount} lower-importance event${hiddenCount > 1 ? "s" : ""} hidden`;
-    wrap.appendChild(note);
-  }
-
-  events.forEach((evt, i) => {
-    const el = document.createElement("div");
-    el.className = "list-ev";
-    el.style.animationDelay = `${Math.min(i * 25, 500)}ms`;
-    const col = evtColor(evt);
-    const imp = evt.importance || 5;
-    const sc = impScale(imp);
-
-    el.innerHTML = `
-      <div class="list-dot" style="background:${col};width:${sc.dotSize}px;height:${sc.dotSize}px"></div>
-      <div class="list-label" style="opacity:${sc.opacity}">
-        <div class="l-date">${fmtDateRange(evt)}</div>
-        <div class="l-title" style="font-size:${sc.titleSize}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</div>
-        <div class="l-desc" style="font-size:${sc.descSize}px">${esc(evt.description || "")}</div>
-        ${evt.category ? `<div class="l-meta"><span class="l-cat">${esc(evt.category)}</span></div>` : ""}
-      </div>
-    `;
-    el.addEventListener("click", () => openModal(evt));
-    wrap.appendChild(el);
+  // Group by decade
+  const groups = {};
+  events.forEach(ev => {
+    const d = new Date(ev.start_date + (ev.start_date.length === 4 ? '-01-01' : ''));
+    const decade = Math.floor((isNaN(d) ? 0 : d.getFullYear()) / 10) * 10;
+    const key = isNaN(d) ? 'Unknown' : `${decade}s`;
+    (groups[key] = groups[key] || []).push(ev);
   });
-  canvas.appendChild(wrap);
+
+  Object.entries(groups).forEach(([label, evs]) => {
+    const grp = document.createElement('div');
+    grp.className = 'list-group';
+    grp.innerHTML = `<div class="list-group-label">${label}</div>`;
+
+    evs.forEach(ev => {
+      const color = eventColor(ev);
+      const opacity = impOpacity(ev.importance);
+      const tags = parseTags(ev.tags);
+      const row = document.createElement('div');
+      row.className = 'list-event';
+      row.style.borderLeftColor = color;
+      row.style.opacity = String(opacity);
+      row.innerHTML = `
+        <div class="list-date">${formatDateRange(ev.start_date, ev.end_date, ev.date_precision)}</div>
+        <div class="list-body">
+          <div class="list-title">${esc(ev.title)}</div>
+          <div class="list-desc">${esc(ev.description || '')}</div>
+          ${tags.length ? '<div class="list-tags">' + tags.map(t => `<span class="list-tag">${esc(t)}</span>`).join('') + '</div>' : ''}
+        </div>
+      `;
+      row.addEventListener('click', () => openModal(ev));
+      grp.appendChild(row);
+    });
+    wrap.appendChild(grp);
+  });
+
+  container.appendChild(wrap);
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }

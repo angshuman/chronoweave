@@ -1,58 +1,52 @@
-/* ChronoWeave — Research (SSE Streaming) */
+/* ChronoWeave -- Research via SSE streaming */
 
-import { S, API } from './state.js';
-import { reasoningPhase } from './dom.js';
-import {
-  showReasoning, hideReasoning, appendToken,
-  addEventPill, finalizeReasoning, reasoningError,
-  reasoningConnectionLost,
-} from './reasoning.js';
-import { loadTimelines } from './sessions.js';
-import { loadSessions } from './sessions.js';
-import { nextColor } from './state.js';
+import { S } from './state.js';
+import { renderChips } from './sessions.js';
+import { renderView } from './render.js';
+import { reasoningStart, reasoningToken, reasoningDone, reasoningError } from './reasoning.js';
+import { controlsBar, landing } from './dom.js';
 
 export async function doResearch(query) {
-  if (!query || !S.activeId) return;
-  showReasoning();
-  const color = nextColor();
-  const params = new URLSearchParams({ session_id: S.activeId, query, color });
-  const es = new EventSource(`${API}/api/research/stream?${params}`);
+  if (!S.sessionId) return;
 
-  es.addEventListener("status", e => {
+  reasoningStart();
+  controlsBar.classList.remove('hidden');
+  landing.classList.add('hidden');
+
+  const color = S.nextColor();
+  const url = `/api/research/stream?session_id=${encodeURIComponent(S.sessionId)}&query=${encodeURIComponent(query)}&color=${encodeURIComponent(color)}`;
+
+  const es = new EventSource(url);
+
+  es.addEventListener('token', (e) => {
     const d = JSON.parse(e.data);
-    reasoningPhase.textContent = d.message;
+    reasoningToken(d.text || '');
   });
 
-  es.addEventListener("token", e => {
-    const d = JSON.parse(e.data);
-    appendToken(d.text);
-  });
-
-  es.addEventListener("event_found", e => {
-    const d = JSON.parse(e.data);
-    addEventPill(d.index, d.title);
-  });
-
-  es.addEventListener("result", async () => {
+  es.addEventListener('timeline', (e) => {
+    const tl = JSON.parse(e.data);
+    S.timelines.push(tl);
+    S.visibleTimelines.push(tl.id);
+    renderChips();
+    renderView();
+    reasoningDone();
     es.close();
-    finalizeReasoning();
-    await loadTimelines();
-    await loadSessions();
-    setTimeout(() => hideReasoning(), 800);
   });
 
-  es.addEventListener("error", e => {
-    let msg = "Connection error";
-    try { if (e.data) { const d = JSON.parse(e.data); msg = d.message || msg; } } catch {}
-    es.close();
+  es.addEventListener('error', (e) => {
+    let msg = 'Unknown error';
+    try { msg = JSON.parse(e.data).message; } catch {}
     reasoningError(msg);
+    es.close();
   });
 
-  es.addEventListener("done", () => { es.close(); });
+  es.addEventListener('done', () => {
+    reasoningDone();
+    es.close();
+  });
 
   es.onerror = () => {
-    if (es.readyState === EventSource.CLOSED) return;
+    reasoningError('Connection error');
     es.close();
-    reasoningConnectionLost();
   };
 }
