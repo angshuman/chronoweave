@@ -1,54 +1,59 @@
-/* -- THEMES ----------------------------------------------------------------
-   Each theme sets CSS custom properties on [data-theme="..."].
-   Five themes: midnight, slate, ember, forest, light
-   -------------------------------------------------------------------------- */
-
-[data-theme="midnight"] {
-  --bg:          #0d0f14;
-  --surface:     #13161e;
-  --border:      #1e2230;
-  --text:        #e8eaf2;
-  --text-muted:  #6b7280;
-  --accent:      #6e7bf2;
-  --accent-glow: rgba(110,123,242,0.25);
+/* -- THEMES -------------------------------------------------------------- */
+:root, [data-theme="midnight"]{
+  --font: 'Inter', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+  --bg: #0f1017; --bg2: #161720; --surface: #1c1d28; --surface2: #242531;
+  --border: #2a2b38; --border2: #353646;
+  --text: #e8e8ec; --text2: #a1a1aa; --text3: #6b6b76;
+  --accent: #6e7bf2; --accent2: #8b96f7; --accent-bg: rgba(110,123,242,0.12);
+  --red: #f87171; --green: #4ade80; --orange: #fb923c;
+  --purple: #a78bfa; --cyan: #22d3ee;
+  --glow: rgba(110,123,242,0.25);
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-full: 999px;
+  --ease: cubic-bezier(0.16,1,0.3,1);
+  --sidebar-w: 260px;
+}
+[data-theme="slate"]{
+  --bg: #1a1d23; --bg2: #1f2228; --surface: #262930; --surface2: #2e3139;
+  --border: #363940; --border2: #42454e;
+  --text: #e4e4e8; --text2: #9a9aa4; --text3: #686878;
+  --accent: #60a5fa; --accent2: #7db8fc; --accent-bg: rgba(96,165,250,0.12);
+  --glow: rgba(96,165,250,0.25);
+}
+[data-theme="ember"]{
+  --bg: #1a1614; --bg2: #211c18; --surface: #2a2420; --surface2: #332c26;
+  --border: #3d342c; --border2: #4a4038;
+  --text: #f0e8e0; --text2: #b8a898; --text3: #7a6e62;
+  --accent: #f59e0b; --accent2: #fbbf24; --accent-bg: rgba(245,158,11,0.12);
+  --glow: rgba(245,158,11,0.25);
+}
+[data-theme="forest"]{
+  --bg: #121a14; --bg2: #17201a; --surface: #1e2a22; --surface2: #253029;
+  --border: #2e3a30; --border2: #3a4a3c;
+  --text: #e0f0e4; --text2: #98b8a0; --text3: #607a66;
+  --accent: #4ade80; --accent2: #6ee7a0; --accent-bg: rgba(74,222,128,0.12);
+  --glow: rgba(74,222,128,0.25);
+}
+[data-theme="light"]{
+  --bg: #f5f5f7; --bg2: #ededf0; --surface: #ffffff; --surface2: #f0f0f3;
+  --border: #d8d8de; --border2: #c8c8d0;
+  --text: #1a1a2e; --text2: #555568; --text3: #8888a0;
+  --accent: #4f5bd5; --accent2: #6670e0; --accent-bg: rgba(79,91,213,0.1);
+  --glow: rgba(79,91,213,0.2);
 }
 
-[data-theme="slate"] {
-  --bg:          #0f1117;
-  --surface:     #161b27;
-  --border:      #1e2535;
-  --text:        #d1d9e6;
-  --text-muted:  #5c6882;
-  --accent:      #7aa2f7;
-  --accent-glow: rgba(122,162,247,0.2);
+/* -- Theme Picker -------------------------------------------------------- */
+.theme-picker{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.theme-picker-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;width:100%;margin-bottom:2px}
+.theme-dot{
+  width:20px;height:20px;border-radius:50%;cursor:pointer;
+  border:2px solid transparent;transition:all .15s var(--ease);
+  position:relative;
 }
-
-[data-theme="ember"] {
-  --bg:          #120d0a;
-  --surface:     #1a1210;
-  --border:      #2a1f1a;
-  --text:        #ede0d4;
-  --text-muted:  #7d6458;
-  --accent:      #f97316;
-  --accent-glow: rgba(249,115,22,0.2);
-}
-
-[data-theme="forest"] {
-  --bg:          #0a100d;
-  --surface:     #111a14;
-  --border:      #1a2b1f;
-  --text:        #d4e8d8;
-  --text-muted:  #537060;
-  --accent:      #4ade80;
-  --accent-glow: rgba(74,222,128,0.2);
-}
-
-[data-theme="light"] {
-  --bg:          #f5f7fa;
-  --surface:     #ffffff;
-  --border:      #e2e6ec;
-  --text:        #1a1d27;
-  --text-muted:  #6b7280;
-  --accent:      #6e7bf2;
-  --accent-glow: rgba(110,123,242,0.15);
-}
+.theme-dot:hover{transform:scale(1.15)}
+.theme-dot.active{border-color:var(--text);transform:scale(1.15)}
+.theme-dot[data-theme="midnight"]{background:linear-gradient(135deg,#0f1017,#6e7bf2)}
+.theme-dot[data-theme="slate"]{background:linear-gradient(135deg,#1a1d23,#60a5fa)}
+.theme-dot[data-theme="ember"]{background:linear-gradient(135deg,#1a1614,#f59e0b)}
+.theme-dot[data-theme="forest"]{background:linear-gradient(135deg,#121a14,#4ade80)}
+.theme-dot[data-theme="light"]{background:linear-gradient(135deg,#f5f5f7,#4f5bd5)}
