@@ -1,119 +1,141 @@
+#!/usr/bin/env node
+require("dotenv").config();
+
 /**
- * ChronoWeave -- Local development server (Express).
+ * ChronoWeave -- Express server for local development.
  *
- * - Serves static files from /public
- * - Mounts all API routes at /api/*
- * - Uses dotenv to load .env automatically
+ * Usage:  npm run dev            (reads .env file automatically)
+ *    or:  OPENAI_API_KEY=sk-... npm run dev
  *
- * Not used in production (Vercel uses api/index.js instead).
+ * The server auto-detects which LLM provider to use based on which
+ * API key is set. Priority: ANTHROPIC_API_KEY > OPENAI_API_KEY > XAI_API_KEY
  */
 
-require('dotenv').config();
+const express = require("express");
+const cors = require("cors");
+const path = require("path");
+const routes = require("./lib/routes");
 
-const express = require('express');
-const path    = require('path');
-const routes  = require('./lib/routes');
-
-const app  = express();
-const PORT = process.env.PORT || 8000;
-
+const PORT = parseInt(process.env.PORT || "8000", 10);
+const app = express();
+app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
-// CORS (helpful in dev)
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
+// -- Static frontend -------------------------------------------------------
+// Explicit MIME types -- Windows sometimes serves .js as text/plain which
+// breaks <script type="module">.
+app.use(
+  express.static(path.join(__dirname, "public"), {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith(".js")) {
+        res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+      } else if (filePath.endsWith(".css")) {
+        res.setHeader("Content-Type", "text/css; charset=utf-8");
+      }
+      // No caching in dev -- ensures fresh files after edits
+      res.setHeader("Cache-Control", "no-store");
+    },
+  })
+);
 
-// ---- API Routes ----
+// -- API routes ------------------------------------------------------------
 
-app.get('/api/sessions', (req, res) => {
+// Sessions
+app.get("/api/sessions", (_req, res) => {
   res.json(routes.listSessions());
 });
 
-app.post('/api/sessions', (req, res) => {
-  const s = routes.createSession(req.body?.name);
+app.post("/api/sessions", (req, res) => {
+  const s = routes.createSession(req.body.name);
   res.status(201).json(s);
 });
 
-app.delete('/api/sessions/:sid', (req, res) => {
+app.delete("/api/sessions/:sid", (req, res) => {
   res.json(routes.deleteSession(req.params.sid));
 });
 
-app.put('/api/sessions/:sid', (req, res) => {
-  res.json(routes.updateSession(req.params.sid, req.body?.name));
+app.put("/api/sessions/:sid", (req, res) => {
+  res.json(routes.updateSession(req.params.sid, req.body.name));
 });
 
-app.get('/api/sessions/:sid/timelines', (req, res) => {
+// Timelines
+app.get("/api/sessions/:sid/timelines", (req, res) => {
   res.json(routes.listTimelines(req.params.sid));
 });
 
-// SSE streaming research endpoint
-app.get('/api/research/stream', async (req, res) => {
+// Research (non-streaming fallback)
+app.post("/api/research", async (req, res) => {
+  try {
+    const tl = await routes.researchTopic(req.body);
+    res.json(tl);
+  } catch (err) {
+    res.status(err.status || 500).json({ detail: err.message });
+  }
+});
+
+// Research (SSE streaming)
+app.get("/api/research/stream", async (req, res) => {
   const { session_id, query, color } = req.query;
   if (!session_id || !query) {
-    return res.status(400).json({ detail: 'session_id and query required' });
+    return res.status(400).json({ detail: "session_id and query required" });
   }
+
   res.writeHead(200, {
-    'Content-Type':      'text/event-stream',
-    'Cache-Control':     'no-cache',
-    'Connection':        'keep-alive',
-    'X-Accel-Buffering': 'no',
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
   });
+
   const send = (type, data) => {
     res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
   };
+
   try {
     await routes.researchTopicStream(
       { session_id, query, color },
-      (type, data) => { if (!res.writableEnded) send(type, data); }
+      (type, data) => {
+        if (!res.writableEnded) send(type, data);
+      }
     );
   } catch (err) {
-    if (!res.writableEnded) send('error', { message: err.message });
+    if (!res.writableEnded) send("error", { message: err.message });
   }
   if (!res.writableEnded) {
-    res.write('event: done\ndata: {}\n\n');
+    res.write("event: done\ndata: {}\n\n");
     res.end();
   }
 });
 
-app.post('/api/research', async (req, res, next) => {
-  try {
-    const tl = await routes.researchTopic(req.body);
-    res.json(tl);
-  } catch (err) { next(err); }
-});
-
-app.post('/api/merge', async (req, res, next) => {
+// Merge
+app.post("/api/merge", async (req, res) => {
   try {
     const tl = await routes.mergeTimelines(req.body);
     res.json(tl);
-  } catch (err) { next(err); }
+  } catch (err) {
+    res.status(err.status || 500).json({ detail: err.message });
+  }
 });
 
-app.post('/api/unmerge', (req, res) => {
-  res.json(routes.unmergeTl(req.body?.timeline_id));
+// Unmerge
+app.post("/api/unmerge", (req, res) => {
+  try {
+    res.json(routes.unmergeTl(req.body.timeline_id));
+  } catch (err) {
+    res.status(err.status || 500).json({ detail: err.message });
+  }
 });
 
-app.delete('/api/timelines/:tid', (req, res) => {
+// Delete timeline
+app.delete("/api/timelines/:tid", (req, res) => {
   res.json(routes.deleteTimeline(req.params.tid));
 });
 
-// Catch-all -> index.html (SPA)
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// SPA fallback
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(err.status || 500).json({ detail: err.message });
-});
-
-app.listen(PORT, () => {
-  console.log(`ChronoWeave running at http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`ChronoWeave server listening on http://localhost:${PORT}`);
 });
