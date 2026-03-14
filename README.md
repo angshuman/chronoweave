@@ -16,7 +16,7 @@ AI-powered timeline research app. Research any topic and get an interactive, chr
 
 ## Architecture
 
-- **Backend**: Node.js + Express + better-sqlite3 + Anthropic Claude / OpenAI GPT-4o / xAI Grok
+- **Backend**: Node.js + Express + better-sqlite3 + Anthropic Claude / OpenAI GPT-5.4 / xAI Grok
 - **Frontend**: Vanilla HTML/CSS/JS + Lucide icons
 - **Deployment**: Vercel-ready (serverless functions + static assets)
 
@@ -32,13 +32,13 @@ Open http://localhost:8000
 
 The `.env` file is loaded automatically via `dotenv`. Set any ONE of these keys:
 
-| Variable | Provider | Model |
-|----------|----------|-------|
-| `ANTHROPIC_API_KEY` | Anthropic | Claude Sonnet |
-| `OPENAI_API_KEY` | OpenAI | GPT-4o |
-| `XAI_API_KEY` | xAI | Grok 3 |
+| Variable | Provider | Default Model |
+|----------|----------|---------------|
+| `ANTHROPIC_API_KEY` | Anthropic | Claude Sonnet 4.6 |
+| `OPENAI_API_KEY` | OpenAI | GPT-5.4 |
+| `XAI_API_KEY` | xAI | Grok 4.20 |
 
-If multiple keys are set, priority is Anthropic > OpenAI > Grok.
+If multiple keys are set, priority is Anthropic > OpenAI > Grok. Override the model with `LLM_MODEL=<model-id>`.
 
 ## Deploy to Vercel
 
