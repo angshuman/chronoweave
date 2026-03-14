@@ -1,13 +1,14 @@
 #!/usr/bin/env node
+require("dotenv").config();
+
 /**
  * ChronoWeave — Express server for local development.
  *
- * Usage:  OPENAI_API_KEY=sk-... node server.js
- *    or:  ANTHROPIC_API_KEY=sk-... node server.js
- *    or:  npm run dev  (with .env loaded)
+ * Usage:  npm run dev            (reads .env file automatically)
+ *    or:  OPENAI_API_KEY=sk-... npm run dev
  *
  * The server auto-detects which LLM provider to use based on which
- * API key is set (ANTHROPIC_API_KEY takes priority over OPENAI_API_KEY).
+ * API key is set. Priority: ANTHROPIC_API_KEY > OPENAI_API_KEY > XAI_API_KEY
  */
 
 const express = require("express");
