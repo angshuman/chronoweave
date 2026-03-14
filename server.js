@@ -21,10 +21,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ── Static frontend ─────────────────────────────────────────────────────────────
+// ── Static frontend ──────────────────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, "public")));
 
-// ── API routes ────────────────────────────────────────────────────────────────
+// ── API routes ──────────────────────────────────────────────────────────────────────────
 
 // Sessions
 app.get("/api/sessions", (_req, res) => {
