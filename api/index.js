@@ -1,5 +1,5 @@
 /**
- * ChronoWeave — Vercel serverless catch-all handler.
+ * ChronoWeave -- Vercel serverless catch-all handler.
  *
  * vercel.json rewrites /api/* to this function.
  * Parses the route and delegates to shared handlers in lib/routes.js.
