@@ -33,6 +33,15 @@ const canvas = _$("#canvas");
 const canvasWrap = _$("#canvasWrap");
 const loaderBg = _$("#loaderBg");
 const loaderText = _$("#loaderText");
+const reasoningOverlay = _$("#reasoningOverlay");
+const reasoningPhase = _$("#reasoningPhase");
+const reasoningPulse = _$("#reasoningPulse");
+const reasoningBody = _$("#reasoningBody");
+const reasoningStream = _$("#reasoningStream");
+const reasoningEvents = _$("#reasoningEvents");
+const reasoningTokens = _$("#reasoningTokens");
+const reasoningEventCount = _$("#reasoningEventCount");
+const reasoningToggle = _$("#reasoningToggle");
 const modalBg = _$("#modalBg");
 const viewSwitch = _$("#viewSwitch");
 const mergeBtn = _$("#mergeBtn");
@@ -148,15 +157,115 @@ function renderChips() {
 
 function toggleSelect(id) { S.selected.has(id) ? S.selected.delete(id) : S.selected.add(id); renderChips(); }
 
-// ── Research ───────────────────────────────────────────────────────────────
+// ── Reasoning Panel Logic ───────────────────────────────────────────────────
+function showReasoning() {
+  reasoningOverlay.classList.remove("hidden");
+  reasoningPulse.className = "reasoning-pulse";
+  reasoningPhase.textContent = "Connecting...";
+  reasoningStream.textContent = "";
+  reasoningEvents.innerHTML = "";
+  reasoningTokens.textContent = "0 tokens";
+  reasoningEventCount.textContent = "0 events";
+  reasoningBody.classList.remove("collapsed");
+  reasoningToggle.classList.remove("collapsed");
+  _reasoningTokenCount = 0;
+  _reasoningEvCount = 0;
+  lucide.createIcons({nodes:[reasoningOverlay]});
+}
+function hideReasoning() {
+  reasoningOverlay.classList.add("hidden");
+}
+let _reasoningTokenCount = 0;
+let _reasoningEvCount = 0;
+
+reasoningToggle.addEventListener("click", () => {
+  reasoningBody.classList.toggle("collapsed");
+  reasoningToggle.classList.toggle("collapsed");
+});
+
+// ── Research (SSE Streaming) ────────────────────────────────────────────────
 async function doResearch(query) {
   if (!query || !S.activeId) return;
-  showLoader("Researching...");
-  try {
-    await api("/api/research", {method:"POST", body:JSON.stringify({session_id:S.activeId, query, color:nextColor()})});
-    await loadTimelines(); await loadSessions();
-  } catch(e) { alert("Research failed: "+e.message); }
-  finally { hideLoader(); }
+  showReasoning();
+  const color = nextColor();
+  const params = new URLSearchParams({session_id: S.activeId, query, color});
+  const es = new EventSource(`${API}/api/research/stream?${params}`);
+  let cursor = null;
+
+  function appendToken(text) {
+    if (cursor) cursor.remove();
+    reasoningStream.appendChild(document.createTextNode(text));
+    cursor = document.createElement("span");
+    cursor.className = "token-cursor";
+    reasoningStream.appendChild(cursor);
+    reasoningBody.scrollTop = reasoningBody.scrollHeight;
+    _reasoningTokenCount++;
+    if (_reasoningTokenCount % 5 === 0) {
+      reasoningTokens.textContent = _reasoningTokenCount + " tokens";
+    }
+  }
+
+  function addEventPill(idx, title) {
+    _reasoningEvCount = idx;
+    reasoningEventCount.textContent = idx + " event" + (idx !== 1 ? "s" : "");
+    const pill = document.createElement("span");
+    pill.className = "reasoning-ev-pill";
+    pill.innerHTML = `<span class="pill-num">${idx}</span>${esc(title)}`;
+    reasoningEvents.appendChild(pill);
+    reasoningEvents.scrollTop = reasoningEvents.scrollHeight;
+  }
+
+  es.addEventListener("status", e => {
+    const d = JSON.parse(e.data);
+    reasoningPhase.textContent = d.message;
+  });
+
+  es.addEventListener("token", e => {
+    const d = JSON.parse(e.data);
+    appendToken(d.text);
+  });
+
+  es.addEventListener("event_found", e => {
+    const d = JSON.parse(e.data);
+    addEventPill(d.index, d.title);
+  });
+
+  es.addEventListener("result", async () => {
+    es.close();
+    reasoningTokens.textContent = _reasoningTokenCount + " tokens";
+    reasoningEventCount.textContent = _reasoningEvCount + " events";
+    if (cursor) cursor.remove();
+    reasoningPulse.classList.add("done");
+    reasoningPhase.textContent = "Timeline ready";
+    await loadTimelines();
+    await loadSessions();
+    setTimeout(() => hideReasoning(), 800);
+  });
+
+  es.addEventListener("error", e => {
+    let msg = "Connection error";
+    try { if (e.data) { const d = JSON.parse(e.data); msg = d.message || msg; } } catch {}
+    es.close();
+    if (cursor) cursor.remove();
+    reasoningPulse.classList.add("error");
+    reasoningPhase.textContent = "Error: " + msg;
+    reasoningOverlay.addEventListener("click", function dismiss(ev) {
+      if (ev.target === reasoningOverlay) { hideReasoning(); reasoningOverlay.removeEventListener("click", dismiss); }
+    });
+  });
+
+  es.addEventListener("done", () => { es.close(); });
+
+  es.onerror = () => {
+    if (es.readyState === EventSource.CLOSED) return;
+    es.close();
+    if (cursor) cursor.remove();
+    reasoningPulse.classList.add("error");
+    reasoningPhase.textContent = "Connection lost";
+    reasoningOverlay.addEventListener("click", function dismiss(ev) {
+      if (ev.target === reasoningOverlay) { hideReasoning(); reasoningOverlay.removeEventListener("click", dismiss); }
+    });
+  };
 }
 
 // ── Merge ──────────────────────────────────────────────────────────────────
@@ -366,6 +475,8 @@ function gatherEvents() {
 }
 
 // ── LIST VIEW ──────────────────────────────────────────────────────────────
+
+// ── LIST VIEW ──────────────────────────────────────────────────────────────
 function renderListView(events, hiddenCount) {
   const wrap = document.createElement("div");
   wrap.className = "list-view";
@@ -373,48 +484,37 @@ function renderListView(events, hiddenCount) {
   if (hiddenCount > 0) {
     const note = document.createElement("div");
     note.className = "empty-note";
-    note.style.cssText = "padding:12px 0;font-size:12px";
-    note.textContent = `${hiddenCount} lower-importance event${hiddenCount > 1 ? "s" : ""} hidden by filter`;
+    note.style.cssText = "padding:8px 0;font-size:11px";
+    note.textContent = `${hiddenCount} lower-importance event${hiddenCount > 1 ? "s" : ""} hidden`;
     wrap.appendChild(note);
   }
 
   events.forEach((evt, i) => {
     const el = document.createElement("div");
     el.className = "list-ev";
-    el.style.animationDelay = `${Math.min(i*30,600)}ms`;
+    el.style.animationDelay = `${Math.min(i * 25, 500)}ms`;
     const col = evtColor(evt);
     const imp = evt.importance || 5;
     const sc = impScale(imp);
 
-    let durBar = "";
-    if (evt.end_date && evt.end_date !== evt.start_date) {
-      durBar = `<div class="list-dur" style="background:${col};height:calc(100% - 18px)"></div>`;
-    }
-
-    const glowClass = sc.glow ? " imp-glow" : "";
-
     el.innerHTML = `
       <div class="list-dot" style="background:${col};width:${sc.dotSize}px;height:${sc.dotSize}px"></div>
-      ${durBar}
-      <div class="list-card${glowClass}" style="padding:${sc.cardPad}px ${sc.cardPad + 4}px;opacity:${sc.opacity}">
-        <div class="list-imp" style="background:${col}"></div>
-        <div class="list-date">${fmtDateRange(evt)}</div>
-        <div class="list-title" style="font-size:${sc.titleSize}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</div>
-        <div class="list-desc" style="font-size:${sc.descSize}px">${esc(evt.description||"")}</div>
-        <div class="list-meta">
-          ${evt.category ? `<span class="list-cat">${esc(evt.category)}</span>` : ""}
-          ${sourceDotsHtml(evt)}
-          ${sourceLabel(evt)}
-        </div>
+      <div class="list-label" style="opacity:${sc.opacity}">
+        <div class="l-date">${fmtDateRange(evt)}</div>
+        <div class="l-title" style="font-size:${sc.titleSize}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</div>
+        <div class="l-desc" style="font-size:${sc.descSize}px">${esc(evt.description || "")}</div>
+        ${evt.category ? `<div class="l-meta"><span class="l-cat">${esc(evt.category)}</span></div>` : ""}
       </div>
     `;
-    el.querySelector(".list-card").addEventListener("click", () => openModal(evt));
+    el.addEventListener("click", () => openModal(evt));
     wrap.appendChild(el);
   });
   canvas.appendChild(wrap);
 }
 
 // ── LINEAR (VERTICAL PROPORTIONAL) VIEW ────────────────────────────────────
+// Axis centered in container. Dots on axis, horizontal connectors to labels.
+// Left/right alternating with staggered lanes for dense text without clipping.
 function renderLinearView(events, hiddenCount, allEvts) {
   if (!events.length) { canvas.innerHTML = '<div class="empty-note">No events to display</div>'; return; }
 
@@ -435,159 +535,204 @@ function renderLinearView(events, hiddenCount, allEvts) {
   const maxTs = Math.max(...parsed.map(e => e._end || e._start));
   const span = maxTs - minTs || 1;
 
-  const AXIS_LEFT = 110;
-  const CARD_AREA_LEFT = AXIS_LEFT + 16;
-  const PX_PER_YEAR = 70 * S.zoom;
-  const totalYears = span / (365.25 * 24 * 3600 * 1000);
+  // Measure available width from the scroll container
+  const containerW = canvasWrap.clientWidth - 40; // minus canvas padding
+  const AXIS_X = Math.round(containerW * 0.42);   // axis slightly left of center
+  const CONN_LEN = 28;        // connector line length
+  const TEXT_GAP = 6;          // gap between connector end and text
+  const RIGHT_W = Math.min(containerW - AXIS_X - CONN_LEN - TEXT_GAP - 16, 440);
+  const LEFT_W = Math.min(AXIS_X - CONN_LEN - TEXT_GAP - 16, 440);
+  const MIN_Y_GAP = 44;       // min vertical distance between labels on same side
+
+  // Adaptive density
+  const totalYearsRaw = span / (365.25 * 24 * 3600 * 1000);
+  const basePxYear = totalYearsRaw > 30 ? 25 : totalYearsRaw > 10 ? 40 : 55;
+  const PX_PER_YEAR = basePxYear * S.zoom;
   const basePxPerMs = PX_PER_YEAR / (365.25 * 24 * 3600 * 1000);
 
   // Gap detection
   const gaps = detectGaps(parsed);
-  const mapping = buildGapCroppedMapping(parsed, gaps, basePxPerMs, 40);
-
-  const totalHeight = Math.max(800, mapping.totalPx + 120);
+  const mapping = buildGapCroppedMapping(parsed, gaps, basePxPerMs, 30);
 
   function yPos(ts) { return mapping.posFunc(ts); }
-
-  wrap.style.height = totalHeight + "px";
 
   // Axis
   const axis = document.createElement("div");
   axis.className = "linear-axis";
-  axis.style.left = AXIS_LEFT + "px";
+  axis.style.left = AXIS_X + "px";
   wrap.appendChild(axis);
 
-  // Year labels
+  // Year labels — placed to the right of the axis, inline
   const minYear = new Date(minTs).getFullYear();
   const maxYear = new Date(maxTs).getFullYear();
   const yearStep = getYearStep(maxYear - minYear, S.zoom);
-  for (let y = minYear; y <= maxYear; y += yearStep) {
+  const majorStart = Math.floor(minYear / yearStep) * yearStep;
+  const minorStep = Math.max(1, Math.floor(yearStep / 2));
+  const majorYearSet = new Set();
+  for (let y = majorStart; y <= maxYear + yearStep; y += yearStep) majorYearSet.add(y);
+
+  for (let y = majorStart; y <= maxYear + yearStep; y += (minorStep < yearStep ? minorStep : 1)) {
+    if (y < minYear || y > maxYear) continue;
     const ts = new Date(y, 0, 1).getTime();
     if (ts < minTs || ts > maxTs) continue;
     const top = yPos(ts);
-    // Skip label if it falls inside a gap break region
     const inGap = gaps.some(g => ts > g.startTs && ts < g.endTs);
     if (inGap) continue;
-    const lbl = document.createElement("div");
-    lbl.className = "linear-year-label";
-    lbl.style.top = top + "px";
-    lbl.textContent = y;
-    wrap.appendChild(lbl);
-    const tick = document.createElement("div");
-    tick.className = "linear-year-tick";
-    tick.style.top = top + "px";
-    wrap.appendChild(tick);
+    const isMajor = majorYearSet.has(y);
+    if (isMajor) {
+      const lbl = document.createElement("div");
+      lbl.className = "linear-year-label";
+      lbl.style.top = top + "px";
+      lbl.style.left = (AXIS_X - 52) + "px";
+      lbl.style.width = "44px";
+      lbl.textContent = y;
+      wrap.appendChild(lbl);
+      const tick = document.createElement("div");
+      tick.className = "linear-year-tick";
+      tick.style.top = top + "px";
+      tick.style.left = (AXIS_X - 6) + "px";
+      wrap.appendChild(tick);
+    } else if (minorStep < yearStep) {
+      const tick = document.createElement("div");
+      tick.className = "linear-year-tick-minor";
+      tick.style.top = top + "px";
+      tick.style.left = (AXIS_X - 3) + "px";
+      wrap.appendChild(tick);
+    }
+    if (minorStep >= yearStep) y += yearStep - 1;
   }
 
-  // Gap break indicators
+  // Gap breaks
   mapping.gapBreaks.forEach(gb => {
     const br = document.createElement("div");
     br.className = "gap-break";
     br.style.top = gb.pos + "px";
+    br.style.left = (AXIS_X - 6) + "px";
     br.innerHTML = `<div class="gap-break-line">${GAP_BREAK_SVG}${GAP_BREAK_SVG}</div><span class="gap-break-label">${gb.label}</span>`;
     wrap.appendChild(br);
   });
 
-  // Lane assignment
-  const MIN_EVENT_H = 48;
-  const LANE_WIDTH = 260;
-  const LANE_GAP = 8;
-
+  // Build items with y positions
   const items = parsed.map((e, i) => {
-    const yStart = yPos(e._start);
-    const yEnd = e._end ? Math.max(yPos(e._end), yStart + MIN_EVENT_H) : yStart + MIN_EVENT_H;
-    return { evt: e, yStart, yEnd, lane: 0, idx: i };
+    const y = yPos(e._start);
+    const yEnd = e._end ? yPos(e._end) : y;
+    const imp = e.importance || 5;
+    return { evt: e, y, yEnd, imp, idx: i, side: 0, adjustedY: y };
   });
 
-  items.sort((a, b) => a.yStart - b.yStart || (b.yEnd - b.yStart) - (a.yEnd - a.yStart));
+  items.sort((a, b) => a.y - b.y);
 
-  const laneEnds = [];
-  items.forEach(item => {
-    let placed = false;
-    for (let l = 0; l < laneEnds.length; l++) {
-      if (item.yStart >= laneEnds[l] + 4) {
-        item.lane = l;
-        laneEnds[l] = item.yEnd;
-        placed = true;
-        break;
+  // Assign sides: alternate
+  items.forEach((item, i) => {
+    item.side = (i % 2 === 0) ? 1 : -1; // 1 = right, -1 = left
+  });
+
+  // De-overlap per side independently — so left and right labels
+  // can interleave at staggered Y positions, using more page space
+  const rightItems = items.filter(it => it.side === 1).sort((a, b) => a.y - b.y);
+  const leftItems = items.filter(it => it.side === -1).sort((a, b) => a.y - b.y);
+
+  function deOverlapSide(arr) {
+    for (let i = 1; i < arr.length; i++) {
+      if (arr[i].adjustedY - arr[i - 1].adjustedY < MIN_Y_GAP) {
+        arr[i].adjustedY = arr[i - 1].adjustedY + MIN_Y_GAP;
       }
     }
-    if (!placed) {
-      item.lane = laneEnds.length;
-      laneEnds.push(item.yEnd);
-    }
-  });
-
-  const maxLane = laneEnds.length;
-
-  // Cluster hidden events
-  if (hiddenCount > 0) {
-    const hiddenEvts = allEvts.filter(e => (e.importance || 5) < S.minImportance);
-    const clusters = buildClusters(hiddenEvts, parsed, yPos, "vertical");
-    clusters.forEach(cl => {
-      const pill = document.createElement("div");
-      pill.className = "cluster-pill";
-      pill.style.top = cl.y + "px";
-      pill.style.left = (CARD_AREA_LEFT + maxLane * (LANE_WIDTH + LANE_GAP) + 12) + "px";
-      pill.innerHTML = `<span class="cluster-count">${cl.count}</span>${cl.label}`;
-      pill.title = cl.titles.join("\n");
-      pill.addEventListener("click", () => setMinImportance(0));
-      wrap.appendChild(pill);
-    });
   }
+  deOverlapSide(rightItems);
+  deOverlapSide(leftItems);
 
-  // Render events
+  // Render nodes
   items.forEach((item, i) => {
-    const { evt, yStart, yEnd, lane } = item;
-    const isDuration = evt._end && evt._end !== evt._start;
+    const { evt, y, yEnd, imp, side, adjustedY } = item;
     const col = evtColor(evt);
-    const imp = evt.importance || 5;
     const sc = impScale(imp);
-    const left = CARD_AREA_LEFT + lane * (LANE_WIDTH + LANE_GAP);
-    const glowClass = sc.glow ? " imp-glow" : "";
+    const isDuration = evt._end && evt._end !== evt._start;
+    const textW = side > 0 ? RIGHT_W : LEFT_W;
 
-    const el = document.createElement("div");
-    el.className = "linear-ev";
-    el.style.top = yStart + "px";
-    el.style.left = left + "px";
-    el.style.width = LANE_WIDTH + "px";
-    el.style.animationDelay = `${Math.min(i * 25, 500)}ms`;
+    const node = document.createElement("div");
+    node.className = "tl-node";
+    node.style.animationDelay = `${Math.min(i * 20, 400)}ms`;
 
-    if (isDuration) {
-      const h = Math.max(yEnd - yStart, 28);
-      el.style.height = h + "px";
-      el.innerHTML = `
-        <div class="linear-bar${glowClass}" style="background:${hexAlpha(col,0.2)};height:100%;opacity:${sc.opacity}">
-          <div class="list-imp" style="background:${col}"></div>
-          <span class="linear-bar-title" style="color:${col};font-size:${sc.barTitleSize}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</span>
-          <span class="linear-bar-dates">${fmtDateRange(evt)}</span>
-          ${sourceDotsSmall(evt)}
-        </div>
-      `;
-      el.querySelector(".linear-bar").addEventListener("click", () => openModal(evt));
-    } else {
-      el.innerHTML = `
-        <div class="linear-point">
-          <div class="linear-point-dot" style="background:${col};width:${sc.dotSize}px;height:${sc.dotSize}px"></div>
-          <div class="linear-card${glowClass}" style="padding:${sc.cardPad}px ${sc.cardPad + 2}px;opacity:${sc.opacity}">
-            <div class="list-imp" style="background:${col}"></div>
-            <div class="list-date">${fmtDateRange(evt)}</div>
-            <div class="list-title" style="font-size:${sc.titleSize}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</div>
-            <div class="list-desc" style="font-size:${sc.descSize}px">${esc(evt.description||"")}</div>
-            ${sourceDotsHtml(evt) ? `<div style="margin-top:4px">${sourceDotsHtml(evt)}</div>` : ""}
-          </div>
-        </div>
-      `;
-      el.querySelector(".linear-card").addEventListener("click", () => openModal(evt));
+    // Dot on axis
+    const dot = document.createElement("div");
+    dot.className = "tl-dot" + (sc.glow ? " glow" : "");
+    dot.style.background = col;
+    dot.style.width = sc.dotSize + "px";
+    dot.style.height = sc.dotSize + "px";
+    dot.style.left = AXIS_X + "px";
+    dot.style.top = y + "px";
+    node.appendChild(dot);
+
+    // Duration range bar
+    if (isDuration && yEnd > y) {
+      const range = document.createElement("div");
+      range.className = "tl-range";
+      range.style.background = col;
+      range.style.top = y + "px";
+      range.style.left = (AXIS_X - 1) + "px";
+      range.style.height = Math.max(yEnd - y, 4) + "px";
+      node.appendChild(range);
     }
 
-    wrap.appendChild(el);
+    // Connector line (horizontal from axis to text)
+    const conn = document.createElement("div");
+    conn.className = "tl-conn";
+    conn.style.background = col;
+    const connTop = adjustedY;
+    if (side > 0) {
+      conn.style.left = (AXIS_X + 2) + "px";
+      conn.style.width = CONN_LEN + "px";
+    } else {
+      conn.style.left = (AXIS_X - CONN_LEN - 2) + "px";
+      conn.style.width = CONN_LEN + "px";
+    }
+    conn.style.top = connTop + "px";
+    node.appendChild(conn);
+
+    // Vertical joiner if label was pushed away from its dot
+    if (Math.abs(adjustedY - y) > 2) {
+      const joiner = document.createElement("div");
+      joiner.className = "tl-conn";
+      joiner.style.background = col;
+      joiner.style.width = "1px";
+      joiner.style.height = Math.abs(adjustedY - y) + "px";
+      joiner.style.top = Math.min(y, adjustedY) + "px";
+      joiner.style.left = (side > 0 ? AXIS_X + 2 : AXIS_X - 2) + "px";
+      node.appendChild(joiner);
+    }
+
+    // Text label
+    const text = document.createElement("div");
+    text.className = "tl-text";
+    text.style.top = connTop + "px";
+    text.style.transform = "translateY(-50%)";
+    text.style.opacity = sc.opacity;
+    text.style.width = Math.max(textW, 120) + "px";
+    text.style.maxWidth = Math.max(textW, 120) + "px";
+    if (side > 0) {
+      text.style.left = (AXIS_X + CONN_LEN + TEXT_GAP) + "px";
+    } else {
+      // Right-align: position so it ends just before the connector
+      const leftEdge = AXIS_X - CONN_LEN - TEXT_GAP - Math.max(textW, 120);
+      text.style.left = Math.max(4, leftEdge) + "px";
+      text.style.textAlign = "right";
+    }
+
+    const dateStr = fmtDateRange(evt);
+    text.innerHTML = `
+      <div class="tl-title" style="font-size:${sc.titleSize}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</div>
+      <div class="tl-sub"><span class="tl-date-inline">${dateStr}</span> ${esc(evt.description || "")}</div>
+    `;
+    node.appendChild(text);
+
+    node.addEventListener("click", () => openModal(evt));
+    wrap.appendChild(node);
   });
 
-  const maxBottom = Math.max(...items.map(it => it.yEnd)) + 60;
-  if (maxBottom > totalHeight) wrap.style.height = maxBottom + "px";
-  const maxRight = CARD_AREA_LEFT + maxLane * (LANE_WIDTH + LANE_GAP) + 20;
-  wrap.style.minWidth = maxRight + "px";
+  const maxBottom = items.length ? Math.max(...items.map(it => it.adjustedY + 40), ...items.map(it => it.yEnd + 40)) : 400;
+  wrap.style.height = Math.max(400, maxBottom + 60) + "px";
+  wrap.style.minWidth = (AXIS_X + CONN_LEN + 200) + "px";
 
   canvas.appendChild(wrap);
 }
@@ -616,436 +761,350 @@ function renderHorizontalView(events, hiddenCount, allEvts) {
   const PAD_LEFT = 60;
   const PAD_RIGHT = 60;
   const PX_PER_YEAR_H = 150 * S.zoom;
-  const totalYears = span / (365.25 * 24 * 3600 * 1000);
   const basePxPerMs = PX_PER_YEAR_H / (365.25 * 24 * 3600 * 1000);
+  const CONN_LEN_V = 30;  // vertical connector length
+  const LABEL_H = 40;
 
   // Gap detection
   const gaps = detectGaps(parsed);
   const mapping = buildGapCroppedMapping(parsed, gaps, basePxPerMs, PAD_LEFT);
 
-  const contentWidth = mapping.totalPx || Math.max(800, totalYears * PX_PER_YEAR_H);
+  const contentWidth = mapping.totalPx || 800;
   const totalWidth = PAD_LEFT + contentWidth + PAD_RIGHT;
 
   function xPos(ts) { return mapping.posFunc(ts); }
 
-  // Axis dimensions
-  const CARD_HEIGHT = 80;
-  const LANE_HEIGHT = CARD_HEIGHT + 12;
-  const CONNECTOR_GAP = 16;
+  // Layout timelines into lanes to avoid overlap
+  const timelineIds = [...new Set(parsed.map(e => e._tl.id))];
+  const laneMap = {};
+  timelineIds.forEach((id, i) => laneMap[id] = i);
+  const numLanes = timelineIds.length;
 
-  // Lane assignment: alternating above/below
-  const items = parsed.map((e, idx) => {
-    const xStart = xPos(e._start);
-    const xEnd = e._end ? Math.max(xPos(e._end), xStart + 100) : xStart + 200;
-    return { evt: e, xStart, xEnd, lane: 0, side: "above", idx };
-  });
-  items.sort((a, b) => a.xStart - b.xStart);
-
-  const aboveLaneEnds = [];
-  const belowLaneEnds = [];
-
-  items.forEach(item => {
-    const aboveLane = findFreeLane(aboveLaneEnds, item.xStart, item.xEnd);
-    const belowLane = findFreeLane(belowLaneEnds, item.xStart, item.xEnd);
-
-    if (aboveLane <= belowLane) {
-      item.side = "above";
-      item.lane = aboveLane;
-      if (aboveLane >= aboveLaneEnds.length) aboveLaneEnds.push(item.xEnd + 8);
-      else aboveLaneEnds[aboveLane] = item.xEnd + 8;
-    } else {
-      item.side = "below";
-      item.lane = belowLane;
-      if (belowLane >= belowLaneEnds.length) belowLaneEnds.push(item.xEnd + 8);
-      else belowLaneEnds[belowLane] = item.xEnd + 8;
-    }
-  });
-
-  const maxAboveLanes = aboveLaneEnds.length || 1;
-  const maxBelowLanes = belowLaneEnds.length || 1;
-  const halfHeight = Math.max(maxAboveLanes, maxBelowLanes) * LANE_HEIGHT + CONNECTOR_GAP + 40;
-  const totalH = halfHeight * 2 + 40;
-  const axisY = halfHeight + 20;
-
-  wrap.style.height = totalH + "px";
-  wrap.style.minWidth = totalWidth + "px";
+  const AXIS_Y_BASE = 80;
+  const LANE_H = 28;
+  const totalLaneH = numLanes * LANE_H;
+  const AXIS_Y = AXIS_Y_BASE;
 
   // Axis line
-  const axisEl = document.createElement("div");
-  axisEl.className = "horiz-axis";
-  axisEl.style.top = axisY + "px";
-  axisEl.style.transform = "none";
-  wrap.appendChild(axisEl);
+  const axisLine = document.createElement("div");
+  axisLine.className = "horiz-axis";
+  axisLine.style.top = AXIS_Y + "px";
+  axisLine.style.width = totalWidth + "px";
+  wrap.appendChild(axisLine);
 
   // Year labels
   const minYear = new Date(minTs).getFullYear();
   const maxYear = new Date(maxTs).getFullYear();
   const yearStep = getYearStep(maxYear - minYear, S.zoom);
-  for (let y = minYear; y <= maxYear; y += yearStep) {
+  const majorStart = Math.floor(minYear / yearStep) * yearStep;
+  const minorStep = Math.max(1, Math.floor(yearStep / 2));
+  const majorYearSet = new Set();
+  for (let y = majorStart; y <= maxYear + yearStep; y += yearStep) majorYearSet.add(y);
+
+  for (let y = majorStart; y <= maxYear + yearStep; y += (minorStep < yearStep ? minorStep : 1)) {
+    if (y < minYear || y > maxYear) continue;
     const ts = new Date(y, 0, 1).getTime();
     if (ts < minTs || ts > maxTs) continue;
+    const x = xPos(ts);
     const inGap = gaps.some(g => ts > g.startTs && ts < g.endTs);
     if (inGap) continue;
-    const x = xPos(ts);
-    const lbl = document.createElement("div");
-    lbl.className = "horiz-year-label";
-    lbl.style.left = x + "px";
-    lbl.style.top = (axisY + 8) + "px";
-    lbl.style.transform = "translateX(-50%)";
-    lbl.textContent = y;
-    wrap.appendChild(lbl);
-    const tick = document.createElement("div");
-    tick.className = "horiz-year-tick";
-    tick.style.left = x + "px";
-    tick.style.top = (axisY - 6) + "px";
-    tick.style.transform = "none";
-    wrap.appendChild(tick);
+    const isMajor = majorYearSet.has(y);
+    if (isMajor) {
+      const lbl = document.createElement("div");
+      lbl.className = "horiz-year-label";
+      lbl.style.left = x + "px";
+      lbl.style.top = (AXIS_Y - 22) + "px";
+      lbl.textContent = y;
+      wrap.appendChild(lbl);
+      const tick = document.createElement("div");
+      tick.className = "horiz-year-tick";
+      tick.style.left = x + "px";
+      tick.style.top = (AXIS_Y - 5) + "px";
+      wrap.appendChild(tick);
+    } else if (minorStep < yearStep) {
+      const tick = document.createElement("div");
+      tick.className = "horiz-year-tick-minor";
+      tick.style.left = x + "px";
+      tick.style.top = (AXIS_Y - 3) + "px";
+      wrap.appendChild(tick);
+    }
+    if (minorStep >= yearStep) y += yearStep - 1;
   }
 
-  // Gap break indicators (horizontal)
+  // Gap breaks
   mapping.gapBreaks.forEach(gb => {
     const br = document.createElement("div");
-    br.className = "gap-break-h";
-    br.style.left = (gb.pos - 8) + "px";
-    br.style.top = (axisY - 24) + "px";
-    br.innerHTML = `${GAP_BREAK_SVG}<span class="gap-break-label">${gb.label}</span>`;
+    br.className = "gap-break horiz-gap";
+    br.style.left = gb.pos + "px";
+    br.style.top = (AXIS_Y - 10) + "px";
+    br.innerHTML = `<div class="gap-break-line">${GAP_BREAK_SVG}${GAP_BREAK_SVG}</div><span class="gap-break-label">${gb.label}</span>`;
     wrap.appendChild(br);
   });
 
-  // Cluster hidden events
-  if (hiddenCount > 0) {
-    const hiddenEvts = allEvts.filter(e => (e.importance || 5) < S.minImportance);
-    const clusters = buildClusters(hiddenEvts, parsed, xPos, "horizontal");
-    clusters.forEach(cl => {
-      const pill = document.createElement("div");
-      pill.className = "cluster-pill";
-      pill.style.left = cl.x + "px";
-      pill.style.top = (axisY + 28) + "px";
-      pill.innerHTML = `<span class="cluster-count">${cl.count}</span>${cl.label}`;
-      pill.title = cl.titles.join("\n");
-      pill.addEventListener("click", () => setMinImportance(0));
-      wrap.appendChild(pill);
-    });
-  }
+  // Place events
+  const itemsByLane = Array.from({length: numLanes}, () => []);
+  const items = parsed.map((e, i) => {
+    const x = xPos(e._start);
+    const xEnd = e._end ? xPos(e._end) : x;
+    const imp = e.importance || 5;
+    const lane = laneMap[e._tl.id];
+    return { evt: e, x, xEnd, imp, idx: i, lane };
+  });
 
-  // Render events
+  // Sort by importance desc within each lane for z-index
+  items.sort((a, b) => a.x - b.x);
+
+  const DOTS_Y = AXIS_Y;
+  const labelRows = []; // track label placements for overlap avoidance
+
   items.forEach((item, i) => {
-    const { evt, xStart, xEnd, lane, side } = item;
-    const isDuration = evt._end && evt._end !== evt._start;
+    const { evt, x, xEnd, imp, lane } = item;
     const col = evtColor(evt);
-    const imp = evt.importance || 5;
     const sc = impScale(imp);
-    const glowClass = sc.glow ? " imp-glow" : "";
+    const isDuration = evt._end && evt._end !== evt._start;
 
-    const el = document.createElement("div");
-    el.className = `horiz-ev ${side}`;
-    el.style.animationDelay = `${Math.min(i * 20, 400)}ms`;
+    const node = document.createElement("div");
+    node.className = "tl-node";
+    node.style.animationDelay = `${Math.min(i * 15, 300)}ms`;
 
-    const cardW = isDuration ? Math.max(xEnd - xStart, 100) : 200;
-    el.style.left = xStart + "px";
-    el.style.width = cardW + "px";
-
-    const laneOffset = CONNECTOR_GAP + lane * LANE_HEIGHT;
-
-    if (side === "above") {
-      el.style.top = (axisY - laneOffset - CARD_HEIGHT) + "px";
-    } else {
-      el.style.top = (axisY + laneOffset + 4) + "px";
-    }
-
-    // Connector line
-    const connector = document.createElement("div");
-    connector.className = "horiz-connector";
-    connector.style.background = hexAlpha(col, 0.3);
-    if (side === "above") {
-      connector.style.left = "10px";
-      connector.style.bottom = "-" + (laneOffset) + "px";
-      connector.style.height = laneOffset + "px";
-    } else {
-      connector.style.left = "10px";
-      connector.style.top = "-" + (laneOffset + 4) + "px";
-      connector.style.height = (laneOffset + 4) + "px";
-    }
-    el.appendChild(connector);
-
-    // Dot on axis
+    // Dot
     const dot = document.createElement("div");
-    dot.className = "horiz-dot";
+    dot.className = "tl-dot" + (sc.glow ? " glow" : "");
     dot.style.background = col;
     dot.style.width = sc.dotSize + "px";
     dot.style.height = sc.dotSize + "px";
-    if (side === "above") {
-      dot.style.top = "auto";
-      dot.style.bottom = "-" + (laneOffset + 4) + "px";
-      dot.style.left = "10px";
-      dot.style.transform = "translate(-50%, 50%)";
-    } else {
-      dot.style.top = "-" + (laneOffset + 8) + "px";
-      dot.style.left = "10px";
-      dot.style.transform = "translate(-50%, -50%)";
-    }
-    el.appendChild(dot);
+    dot.style.left = x + "px";
+    dot.style.top = DOTS_Y + "px";
+    node.appendChild(dot);
 
-    // Card content
-    if (isDuration) {
+    // Duration bar
+    if (isDuration && xEnd > x) {
       const bar = document.createElement("div");
-      bar.className = `horiz-bar${glowClass}`;
-      bar.style.background = hexAlpha(col, 0.2);
-      bar.style.height = CARD_HEIGHT + "px";
-      bar.style.opacity = sc.opacity;
-      bar.innerHTML = `
-        <div class="list-imp" style="background:${col}"></div>
-        <span class="linear-bar-title" style="color:${col};font-size:${sc.barTitleSize}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</span>
-        <span class="linear-bar-dates">${fmtDateRange(evt)}</span>
-        ${sourceDotsSmall(evt)}
-      `;
-      bar.addEventListener("click", () => openModal(evt));
-      el.appendChild(bar);
-    } else {
-      const card = document.createElement("div");
-      card.className = `horiz-card${glowClass}`;
-      card.style.width = "100%";
-      card.style.opacity = sc.opacity;
-      card.style.padding = `${sc.cardPad}px ${sc.cardPad + 2}px`;
-      card.innerHTML = `
-        <div class="list-imp" style="background:${col}"></div>
-        <div class="list-date">${fmtDateRange(evt)}</div>
-        <div class="list-title" style="font-size:${Math.max(sc.titleSize - 1, 11)}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</div>
-        <div class="list-desc" style="font-size:${Math.max(sc.descSize - 1, 10)}px;-webkit-line-clamp:2">${esc(evt.description||"")}</div>
-      `;
-      card.addEventListener("click", () => openModal(evt));
-      el.appendChild(card);
+      bar.className = "tl-range horiz";
+      bar.style.background = col;
+      bar.style.left = x + "px";
+      bar.style.top = DOTS_Y + "px";
+      bar.style.width = Math.max(xEnd - x, 4) + "px";
+      node.appendChild(bar);
     }
 
-    wrap.appendChild(el);
+    // Vertical connector
+    const conn = document.createElement("div");
+    conn.className = "tl-conn vert";
+    conn.style.background = col;
+    conn.style.left = x + "px";
+    conn.style.top = (DOTS_Y + sc.dotSize / 2) + "px";
+    conn.style.height = (CONN_LEN_V + lane * LANE_H) + "px";
+    conn.style.width = "1px";
+    node.appendChild(conn);
+
+    // Label — avoid overlap by checking previous labels at this lane
+    const labelY = DOTS_Y + CONN_LEN_V + lane * LANE_H + 4;
+    const text = document.createElement("div");
+    text.className = "tl-text horiz";
+    text.style.left = x + "px";
+    text.style.top = labelY + "px";
+    text.style.maxWidth = "160px";
+    text.style.opacity = sc.opacity;
+
+    const dateStr = fmtDateRange(evt);
+    text.innerHTML = `
+      <div class="tl-title" style="font-size:${sc.barTitleSize}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</div>
+      <div class="tl-date-inline">${dateStr}</div>
+    `;
+    node.appendChild(text);
+
+    node.addEventListener("click", () => openModal(evt));
+    wrap.appendChild(node);
   });
+
+  wrap.style.width = totalWidth + "px";
+  wrap.style.height = (AXIS_Y + CONN_LEN_V + numLanes * LANE_H + LABEL_H * 3 + 40) + "px";
+  if (hiddenCount > 0) {
+    const note = document.createElement("div");
+    note.className = "empty-note";
+    note.style.cssText = "position:absolute;top:8px;right:8px;font-size:10px";
+    note.textContent = `${hiddenCount} event${hiddenCount > 1 ? "s" : ""} hidden`;
+    wrap.appendChild(note);
+  }
 
   canvas.appendChild(wrap);
 }
 
-// ── Helper: find free lane ─────────────────────────────────────────────────
-function findFreeLane(laneEnds, start) {
-  for (let l = 0; l < laneEnds.length; l++) {
-    if (start >= laneEnds[l]) return l;
+// ── Helpers ────────────────────────────────────────────────────────────────
+function parseDate(str) {
+  if (!str) return null;
+  const s = str.trim();
+  // BC dates: e.g. "3200 BC" or "-3200" or "3200 BCE"
+  const bcMatch = s.match(/^[\-]?(\d+)\s*(?:BC|BCE)$/i);
+  if (bcMatch) {
+    const year = parseInt(bcMatch[1]);
+    // Use a rough timestamp: 1 BC = year 0, 3200 BC = -3199 in proleptic Gregorian
+    return -year * 365.25 * 24 * 3600 * 1000;
   }
-  return laneEnds.length;
-}
-
-// ── Helper: year step for labels ───────────────────────────────────────────
-function getYearStep(yearRange, zoom) {
-  const effectiveRange = yearRange / zoom;
-  if (effectiveRange > 200) return 50;
-  if (effectiveRange > 100) return 20;
-  if (effectiveRange > 50) return 10;
-  if (effectiveRange > 20) return 5;
-  if (effectiveRange > 10) return 2;
-  return 1;
-}
-
-// ── Helper: build clusters of hidden events ────────────────────────────────
-function buildClusters(hiddenEvts, visibleParsed, posFunc, axis) {
-  if (!hiddenEvts.length) return [];
-
-  const hiddenParsed = hiddenEvts
-    .map(e => ({ ...e, _ts: parseDate(e.start_date) }))
-    .filter(e => e._ts)
-    .sort((a,b) => a._ts - b._ts);
-
-  if (!hiddenParsed.length) return [];
-
-  const clusters = [];
-  let current = { events: [hiddenParsed[0]], ts: hiddenParsed[0]._ts };
-
-  const clusterThreshold = axis === "horizontal" ? 100 / (S.zoom || 1) : 60 / (S.zoom || 1);
-
-  for (let i = 1; i < hiddenParsed.length; i++) {
-    const e = hiddenParsed[i];
-    const pos = posFunc(e._ts);
-    const prevPos = posFunc(current.events[current.events.length - 1]._ts);
-    if (Math.abs(pos - prevPos) < clusterThreshold) {
-      current.events.push(e);
-    } else {
-      clusters.push(current);
-      current = { events: [e], ts: e._ts };
-    }
+  // Negative year notation like -3200
+  if (/^-\d+$/.test(s)) {
+    const year = parseInt(s);
+    return year * 365.25 * 24 * 3600 * 1000;
   }
-  clusters.push(current);
-
-  return clusters.map(cl => {
-    const midTs = cl.events[Math.floor(cl.events.length / 2)]._ts;
-    const pos = posFunc(midTs);
-    return {
-      count: cl.events.length,
-      label: cl.events.length === 1 ? "hidden event" : "hidden events",
-      titles: cl.events.map(e => `[${e.importance||5}] ${e.title}`),
-      x: axis === "horizontal" ? pos : 0,
-      y: axis === "vertical" ? pos : 0,
-    };
-  });
-}
-
-// ── Date Parsing ───────────────────────────────────────────────────────────
-function parseDate(s) {
-  if (!s) return null;
-  if (/^\d{4}$/.test(s)) return new Date(parseInt(s), 0, 1).getTime();
-  if (/^\d{4}-\d{2}$/.test(s)) { const [y,m] = s.split("-"); return new Date(parseInt(y), parseInt(m)-1, 1).getTime(); }
-  return new Date(s + "T00:00:00").getTime();
-}
-
-function fmtDate(s) {
-  if (!s) return "?";
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  if (/^\d{4}$/.test(s)) return s;
-  if (/^\d{4}-\d{2}$/.test(s)) { const [y,m] = s.split("-"); return `${months[parseInt(m,10)-1]} ${y}`; }
-  try {
-    const d = new Date(s+"T00:00:00");
-    return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
-  } catch { return s; }
+  // Try YYYY only
+  if (/^\d{4}$/.test(s)) return new Date(s + "-01-01").getTime();
+  // Try YYYY-MM
+  if (/^\d{4}-\d{2}$/.test(s)) return new Date(s + "-01").getTime();
+  // Natural language centuries: "3rd century BC", "5th century AD"
+  const centuryBC = s.match(/^(\d+)(?:st|nd|rd|th)\s+century\s+BC(?:E)?$/i);
+  if (centuryBC) return -(parseInt(centuryBC[1]) * 100) * 365.25 * 24 * 3600 * 1000;
+  const centuryAD = s.match(/^(\d+)(?:st|nd|rd|th)\s+century(?:\s+AD)?$/i);
+  if (centuryAD) return (parseInt(centuryAD[1]) - 1) * 100 * 365.25 * 24 * 3600 * 1000;
+  // "circa 1500" or "c. 1500" or "ca. 1500"
+  const circa = s.match(/^(?:circa|c\.?|ca\.?)\s*(\d+)/i);
+  if (circa) return new Date(circa[1] + "-01-01").getTime();
+  // Try full date
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d.getTime();
 }
 
 function fmtDateRange(evt) {
-  const start = fmtDate(evt.start_date);
-  if (!evt.end_date || evt.end_date === evt.start_date) return start;
-  const end = fmtDate(evt.end_date);
-  return `${start} → ${end}`;
+  const s = fmtDate(evt.start_date);
+  const e = evt.end_date ? fmtDate(evt.end_date) : null;
+  return e && e !== s ? `${s} – ${e}` : s;
 }
 
-// ── Event Helpers ──────────────────────────────────────────────────────────
+function fmtDate(str) {
+  if (!str) return "";
+  const s = str.trim();
+  if (/^-?\d+\s*(?:BC|BCE)$/i.test(s)) return s;
+  if (/^-\d+$/.test(s)) return Math.abs(parseInt(s)) + " BC";
+  if (/^\d{4}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}$/.test(s)) {
+    const [y, m] = s.split("-");
+    return new Date(y, m - 1).toLocaleString("default", {month:"short", year:"numeric"});
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const d = new Date(s + "T00:00:00");
+    return d.toLocaleDateString("default", {year:"numeric",month:"short",day:"numeric"});
+  }
+  return s;
+}
+
+function getYearStep(range, zoom) {
+  if (range <= 0) return 1;
+  const rough = range / (10 * zoom);
+  const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
+  return steps.find(s => s >= rough) || steps[steps.length - 1];
+}
+
 function evtColor(evt) {
-  if (evt.source_color && evt.source_color.startsWith("[")) {
-    try { return JSON.parse(evt.source_color)[0] || evt._tl.color; } catch { /* ignore */ }
-  }
-  return evt.source_color || evt._tl.color;
+  return evt._tl ? evt._tl.color : "#6e7bf2";
 }
 
-function sourceDotsHtml(evt) {
-  if (evt.source_timeline_name && evt.source_timeline_name.startsWith("[")) {
-    try {
-      const srcs = JSON.parse(evt.source_timeline_name);
-      const cols = JSON.parse(evt.source_color||"[]");
-      return `<span class="list-source-dots">${srcs.map((s,i)=>`<span class="sdot" style="background:${cols[i]?.color||cols[i]||"#6e7bf2"}" title="${esc(s.name||s)}"></span>`).join("")}</span>`;
-    } catch { /* ignore */ }
-  }
-  return "";
+function hexAlpha(hex, a) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
 }
 
-function sourceDotsSmall(evt) {
-  if (evt.source_timeline_name && evt.source_timeline_name.startsWith("[")) {
-    try {
-      const srcs = JSON.parse(evt.source_timeline_name);
-      const cols = JSON.parse(evt.source_color||"[]");
-      return `<span class="sdots">${srcs.map((s,i)=>`<span class="sdot" style="background:${cols[i]?.color||cols[i]||"#6e7bf2"}"></span>`).join("")}</span>`;
-    } catch { /* ignore */ }
-  }
-  return "";
-}
-
-function sourceLabel(evt) {
-  if (evt.source_timeline_name && evt.source_timeline_name.startsWith("[")) {
-    try {
-      const srcs = JSON.parse(evt.source_timeline_name);
-      return `<span class="list-source-label">From: ${srcs.map(s=>s.name||s).join(", ")}</span>`;
-    } catch { /* ignore */ }
-  }
-  if (evt._tl.is_merged && evt.source_timeline_name && !evt.source_timeline_name.startsWith("[")) {
-    return `<span class="list-source-label">From: ${esc(evt.source_timeline_name)}</span>`;
-  }
-  return "";
+function esc(s) {
+  return String(s||"")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
 }
 
 // ── Modal ──────────────────────────────────────────────────────────────────
 function openModal(evt) {
-  _$("#mTitle").textContent = evt.title;
-  _$("#mDates").textContent = fmtDateRange(evt);
-  _$("#mDesc").textContent = evt.description || "";
-
-  // Importance pips
-  const impPips = _$("#mImpPips");
-  impPips.innerHTML = "";
   const imp = evt.importance || 5;
-  for (let p = 1; p <= 10; p++) {
-    const pip = document.createElement("span");
-    pip.className = "m-imp-pip" + (p <= imp ? " filled" : "");
-    impPips.appendChild(pip);
-  }
-
-  const srcEl = _$("#mSources"); srcEl.innerHTML = "";
-  if (evt.source_timeline_name && evt.source_timeline_name.startsWith("[")) {
-    try {
-      const srcs = JSON.parse(evt.source_timeline_name);
-      const cols = JSON.parse(evt.source_color||"[]");
-      srcs.forEach((s,i) => {
-        const it = document.createElement("span"); it.className = "m-src-item";
-        it.innerHTML = `<span class="m-src-dot" style="background:${cols[i]?.color||cols[i]||"#6e7bf2"}"></span>${esc(s.name||s)}`;
-        srcEl.appendChild(it);
-      });
-    } catch { /* ignore */ }
-  } else if (evt._tl.is_merged && evt.source_timeline_name) {
-    const it = document.createElement("span"); it.className = "m-src-item";
-    it.innerHTML = `<span class="m-src-dot" style="background:${evt.source_color||"#6e7bf2"}"></span>${esc(evt.source_timeline_name)}`;
-    srcEl.appendChild(it);
-  }
-
-  const tagEl = _$("#mTags"); tagEl.innerHTML = "";
-  try { JSON.parse(evt.tags||"[]").forEach(t => { const sp = document.createElement("span"); sp.className="m-tag"; sp.textContent=t; tagEl.appendChild(sp); }); } catch { /* ignore */ }
-
+  const col = evtColor(evt);
+  const dateStr = fmtDateRange(evt);
+  modalBg.innerHTML = `
+    <div class="modal" style="border-color:${hexAlpha(col,0.3)}">
+      <div class="modal-header" style="border-color:${hexAlpha(col,0.2)}">
+        <div class="modal-dot" style="background:${col}"></div>
+        <div class="modal-meta">
+          <div class="modal-date">${dateStr}</div>
+          <div class="modal-imp">Importance: ${imp}/10</div>
+        </div>
+        <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-title">${esc(evt.title)}</div>
+        ${evt.description ? `<div class="modal-desc">${esc(evt.description)}</div>` : ""}
+        ${evt.category ? `<div class="modal-category">${esc(evt.category)}</div>` : ""}
+        ${evt.significance ? `<div class="modal-sig"><strong>Significance:</strong> ${esc(evt.significance)}</div>` : ""}
+        ${evt.source ? `<div class="modal-source"><strong>Source:</strong> ${esc(evt.source)}</div>` : ""}
+        ${evt._tl ? `<div class="modal-tl"><span class="modal-tl-dot" style="background:${evt._tl.color}"></span>${esc(evt._tl.name)}</div>` : ""}
+      </div>
+    </div>
+  `;
   modalBg.classList.remove("hidden");
+  lucide.createIcons({nodes:[modalBg]});
 }
 
-// ── Utils ──────────────────────────────────────────────────────────────────
-function esc(s) { const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
-function hexAlpha(hex,a) {
-  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
-  return `rgba(${r},${g},${b},${a})`;
-}
+function closeModal() { modalBg.classList.add("hidden"); }
+modalBg.addEventListener("click", e => { if (e.target === modalBg) closeModal(); });
 
-// ── Events ─────────────────────────────────────────────────────────────────
-_$("#newSessionBtn").addEventListener("click", () => createSession());
+// ── UI Wiring ──────────────────────────────────────────────────────────────
+document.getElementById("newResearchBtn").addEventListener("click", () => {
+  const q = document.getElementById("researchInput").value.trim();
+  if (!q) return;
+  if (!S.activeId) { createSession(q); }
+  else doResearch(q);
+  document.getElementById("researchInput").value = "";
+});
 
-// Landing input
-_$("#landingInput").addEventListener("keydown", e => { if (e.key==="Enter") { const q=e.target.value.trim(); if(q) createSession(q); } });
-_$("#landingSubmit").addEventListener("click", () => { const q=_$("#landingInput").value.trim(); if(q) createSession(q); });
+document.getElementById("researchInput").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    document.getElementById("newResearchBtn").click();
+  }
+});
 
-// Session query input
-_$("#queryInput").addEventListener("keydown", e => { if (e.key==="Enter") { const q=e.target.value.trim(); if(q){e.target.value="";doResearch(q);} } });
-_$("#querySubmit").addEventListener("click", () => { const q=_$("#queryInput").value.trim(); if(q){_$("#queryInput").value="";doResearch(q);} });
+document.getElementById("newThreadBtn").addEventListener("click", () => {
+  const q = document.getElementById("landingInput").value.trim();
+  if (!q) return;
+  createSession(q);
+  document.getElementById("landingInput").value = "";
+});
+
+document.getElementById("landingInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    document.getElementById("newThreadBtn").click();
+  }
+});
+
+document.querySelectorAll(".view-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    S.view = btn.dataset.view;
+    document.querySelectorAll(".view-btn").forEach(b => b.classList.toggle("active", b === btn));
+    renderView();
+  });
+});
 
 mergeBtn.addEventListener("click", doMerge);
-_$("#mobileToggle").addEventListener("click", () => sidebar.classList.toggle("open"));
-_$("#mClose").addEventListener("click", () => modalBg.classList.add("hidden"));
-modalBg.addEventListener("click", e => { if (e.target===modalBg) modalBg.classList.add("hidden"); });
 
-// View switch
-viewSwitch.querySelectorAll(".vs-btn").forEach(b => b.addEventListener("click", () => {
-  viewSwitch.querySelectorAll(".vs-btn").forEach(x=>x.classList.remove("active"));
-  b.classList.add("active");
-  S.view = b.dataset.view;
-  renderView();
-}));
+document.querySelector(".zoom-in").addEventListener("click", zoomIn);
+document.querySelector(".zoom-out").addEventListener("click", zoomOut);
+document.querySelector(".zoom-fit").addEventListener("click", zoomFit);
 
-// Zoom controls
-_$("#zoomIn").addEventListener("click", zoomIn);
-_$("#zoomOut").addEventListener("click", zoomOut);
-_$("#zoomFit").addEventListener("click", zoomFit);
+document.getElementById("sidebarToggle").addEventListener("click", () => sidebar.classList.toggle("open"));
+document.getElementById("sidebarClose").addEventListener("click", () => sidebar.classList.remove("open"));
+document.getElementById("homeBtn").addEventListener("click", () => {
+  S.activeId = null; S.timelines = []; renderSessions(); showLanding();
+});
 
-// Mouse wheel zoom on canvas
-canvasWrap.addEventListener("wheel", e => {
-  if (e.ctrlKey || e.metaKey) {
-    e.preventDefault();
-    if (e.deltaY < 0) zoomIn();
-    else zoomOut();
-  }
-}, { passive: false });
-
-// Density dropdown
-_$("#densityBtn").addEventListener("click", e => {
+document.querySelector(".density-btn").addEventListener("click", e => {
   e.stopPropagation();
   densityDropdown.classList.toggle("hidden");
 });
-densityDropdown.querySelectorAll(".dd-item").forEach(b => b.addEventListener("click", () => {
-  setMinImportance(parseInt(b.dataset.min));
-  densityDropdown.classList.add("hidden");
-}));
+densityDropdown.querySelectorAll(".dd-item").forEach(b => {
+  b.addEventListener("click", () => {
+    setMinImportance(parseInt(b.dataset.min));
+    densityDropdown.classList.add("hidden");
+  });
+});
 document.addEventListener("click", () => densityDropdown.classList.add("hidden"));
 
 // ── Init ───────────────────────────────────────────────────────────────────
