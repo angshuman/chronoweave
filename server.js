@@ -21,10 +21,24 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ── Static frontend ──────────────────────────────────────────────────────────────────
-app.use(express.static(path.join(__dirname, "public")));
+// ── Static frontend ───────────────────────────────────────────────────────
+// Explicit MIME types — Windows sometimes serves .js as text/plain which
+// breaks <script type="module">.
+app.use(
+  express.static(path.join(__dirname, "public"), {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith(".js")) {
+        res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+      } else if (filePath.endsWith(".css")) {
+        res.setHeader("Content-Type", "text/css; charset=utf-8");
+      }
+      // No caching in dev — ensures fresh files after edits
+      res.setHeader("Cache-Control", "no-store");
+    },
+  })
+);
 
-// ── API routes ──────────────────────────────────────────────────────────────────────────
+// ── API routes ────────────────────────────────────────────────────────────
 
 // Sessions
 app.get("/api/sessions", (_req, res) => {
