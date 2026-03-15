@@ -91,32 +91,6 @@ function renderAnalyzingBlock() {
   return block;
 }
 
-/** Render the intent classification badge */
-function renderIntentBadge(intent, summary) {
-  const badge = document.createElement('div');
-  badge.className = 'reasoning-intent';
-  const icon = intent === 'research'
-    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>'
-    : intent === 'refine'
-    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'
-    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-
-  const label = intent === 'research' ? 'New Research' : intent === 'refine' ? 'Refining Timeline' : 'Question';
-  badge.innerHTML = `${icon}<span class="ri-label">${label}</span><span class="ri-summary">${esc(summary)}</span>`;
-  return badge;
-}
-
-/** Render a search query step */
-function renderSearchStep(message) {
-  const step = document.createElement('div');
-  step.className = 'reasoning-search-step';
-  step.innerHTML = `
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
-    <span>${esc(message)}</span>
-  `;
-  return step;
-}
-
 export function showReasoning() {
   reasoningOverlay.classList.remove("hidden");
   reasoningPulse.className = "reasoning-pulse";
@@ -140,52 +114,49 @@ export function hideReasoning() {
   reasoningOverlay.classList.add("hidden");
 }
 
-/** Display intent classification */
-export function setIntent(intent, summary, searchQueries) {
-  const badge = renderIntentBadge(intent, summary);
-  reasoningStream.appendChild(badge);
+/** Display intent classification (lightweight badge) */
+export function setIntent(intent, summary) {
+  const badge = document.createElement('div');
+  badge.className = 'reasoning-intent';
 
-  if (searchQueries && searchQueries.length > 0) {
+  const icon = intent === 'research'
+    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>'
+    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+
+  const label = intent === 'research' ? 'New Research' : 'Refining Timeline';
+  badge.innerHTML = `${icon}<span class="ri-label">${label}</span><span class="ri-summary">${esc(summary)}</span>`;
+  reasoningStream.appendChild(badge);
+  reasoningBody.scrollTop = reasoningBody.scrollHeight;
+}
+
+/** Add a search progress message (only shown when web search is triggered) */
+export function addSearchProgress(message) {
+  _streamPhase = 'searching';
+
+  // Add search header if not yet present
+  if (!document.getElementById('searchSection')) {
     const searchHeader = document.createElement('div');
     searchHeader.className = 'reasoning-search-header';
     searchHeader.id = 'searchSection';
     searchHeader.innerHTML = `
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 0 1 9-9"/></svg>
       <span>Searching the web</span>
-      <span class="rsh-count" id="searchCount">0 / ${searchQueries.length}</span>
     `;
     reasoningStream.appendChild(searchHeader);
   }
 
-  reasoningBody.scrollTop = reasoningBody.scrollHeight;
-}
-
-/** Add a search progress message */
-export function addSearchProgress(message) {
-  _streamPhase = 'searching';
-  const step = renderSearchStep(message);
+  const step = document.createElement('div');
+  step.className = 'reasoning-search-step';
+  step.innerHTML = `
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+    <span>${esc(message)}</span>
+  `;
   reasoningStream.appendChild(step);
-
-  // Update counter
-  const countEl = document.getElementById('searchCount');
-  if (countEl) {
-    const parts = countEl.textContent.split('/');
-    const current = parseInt(parts[0].trim()) + 1;
-    countEl.textContent = `${current} /${parts[1]}`;
-  }
-
   reasoningBody.scrollTop = reasoningBody.scrollHeight;
 }
 
 /** Search phase complete */
 export function searchComplete(completed, total) {
-  const countEl = document.getElementById('searchCount');
-  if (countEl) {
-    countEl.textContent = `${completed} / ${total}`;
-    countEl.classList.add('done');
-  }
-
-  // Add search complete divider
   const divider = document.createElement('div');
   divider.className = 'reasoning-search-done';
   divider.innerHTML = `
@@ -193,12 +164,9 @@ export function searchComplete(completed, total) {
       <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
       <path d="M5 8.5L7 10.5L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
-    <span>${completed} web search${completed !== 1 ? 'es' : ''} completed</span>
+    <span>Web search complete — using results for accuracy</span>
   `;
   reasoningStream.appendChild(divider);
-
-  // Add analyzing block
-  reasoningStream.appendChild(renderAnalyzingBlock());
   reasoningBody.scrollTop = reasoningBody.scrollHeight;
 }
 
@@ -206,7 +174,7 @@ export function appendToken(text) {
   _reasoningTokenCount++;
   _jsonBuffer += text;
 
-  // If we haven't added the analyzing block yet (no search phase), add it
+  // If we haven't added the analyzing block yet, add it
   if (_streamPhase === 'init' || _streamPhase === 'searching') {
     _streamPhase = 'streaming';
     if (!document.getElementById('reasoningAnalyzing')) {
