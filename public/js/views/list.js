@@ -1,7 +1,7 @@
-/* ChronoWeave -- List View */
+/* ChronoWeave -- List View (with year section headers) */
 
 import { esc } from '../utils.js';
-import { evtColor, impScale, fmtDateRange } from '../helpers.js';
+import { evtColor, impScale, fmtDateRange, parseDate } from '../helpers.js';
 import { openModal } from '../modal.js';
 
 export function renderListView(events, hiddenCount, canvas) {
@@ -16,7 +16,26 @@ export function renderListView(events, hiddenCount, canvas) {
     wrap.appendChild(note);
   }
 
+  // Group events by year for section headers
+  let lastYear = null;
+
   events.forEach((evt, i) => {
+    // Extract year from start_date
+    const year = extractYear(evt.start_date);
+
+    // Add year section header when year changes
+    if (year !== null && year !== lastYear) {
+      const yearHeader = document.createElement("div");
+      yearHeader.className = "list-year-header";
+      yearHeader.innerHTML = `
+        <span class="list-year-line"></span>
+        <span class="list-year-label">${year}</span>
+        <span class="list-year-line"></span>
+      `;
+      wrap.appendChild(yearHeader);
+      lastYear = year;
+    }
+
     const el = document.createElement("div");
     el.className = "list-ev";
     el.style.animationDelay = `${Math.min(i * 25, 500)}ms`;
@@ -37,4 +56,10 @@ export function renderListView(events, hiddenCount, canvas) {
     wrap.appendChild(el);
   });
   canvas.appendChild(wrap);
+}
+
+function extractYear(dateStr) {
+  if (!dateStr) return null;
+  const match = dateStr.match(/^(\d{4})/);
+  return match ? parseInt(match[1], 10) : null;
 }
