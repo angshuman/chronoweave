@@ -59,6 +59,61 @@
   min-height:80px;
 }
 
+/* -- Intent classification badge ---------------------------------------- */
+.reasoning-intent{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 14px;border-radius:var(--r-md);
+  background:var(--accent-bg);border:1px solid rgba(99,102,241,.15);
+  color:var(--accent);font-size:12px;font-weight:500;
+  animation:cardReveal .3s var(--ease) forwards;
+  opacity:0;transform:translateY(6px);
+}
+.reasoning-intent svg{flex-shrink:0;opacity:.8}
+.ri-label{
+  font-weight:700;letter-spacing:.02em;text-transform:uppercase;
+  font-size:10px;white-space:nowrap;
+}
+.ri-summary{
+  color:var(--text2);margin-left:4px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+
+/* -- Search progress ---------------------------------------------------- */
+.reasoning-search-header{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 14px;border-radius:var(--r-md);
+  background:var(--surface);border:1px solid var(--border);
+  font-size:12px;font-weight:600;color:var(--text);
+  animation:cardReveal .3s var(--ease) forwards;
+  opacity:0;transform:translateY(6px);
+}
+.reasoning-search-header svg{color:var(--accent);flex-shrink:0}
+.rsh-count{
+  margin-left:auto;font-family:var(--mono);font-size:11px;
+  color:var(--text3);font-weight:500;
+  padding:2px 8px;border-radius:var(--r-full);
+  background:var(--bg);
+}
+.rsh-count.done{color:var(--green);background:rgba(74,222,128,.08)}
+
+.reasoning-search-step{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 14px 6px 28px;
+  font-size:11px;color:var(--text2);
+  animation:cardReveal .25s var(--ease) forwards;
+  opacity:0;transform:translateY(4px);
+}
+.reasoning-search-step svg{color:var(--text3);flex-shrink:0;opacity:.6}
+
+.reasoning-search-done{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 14px;
+  font-size:11px;font-weight:500;color:var(--green);
+  animation:cardReveal .3s var(--ease) forwards;
+  opacity:0;transform:translateY(4px);
+}
+.reasoning-search-done svg{flex-shrink:0;color:var(--green)}
+
 /* -- Event cards in reasoning stream ------------------------------------ */
 .reasoning-card{
   background:var(--surface);border:1px solid var(--border);
