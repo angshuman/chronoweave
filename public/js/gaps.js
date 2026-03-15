@@ -57,7 +57,7 @@ export function buildGapCroppedMapping(parsedEvents, gaps, pxPerMsNormal, startO
     };
   }
 
-  const GAP_PX = 64; // generous space for zig-zag break indicator
+  const GAP_PX = 80; // generous space for zig-zag break indicator + text clearance
   const minTs = parsedEvents[0]._start;
   const maxTs = Math.max(...parsedEvents.map(e => e._end || e._start));
 
