@@ -8,6 +8,7 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.js" },
     { "source": "/p/:slug", "destination": "/public/viewer.html" },
+    { "source": "/discover", "destination": "/public/discover.html" },
     { "source": "/(.*)", "destination": "/public/$1" }
   ]
 }
