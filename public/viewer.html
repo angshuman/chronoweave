@@ -26,6 +26,8 @@
   .hidden{display:none !important}
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Inter',system-ui,sans-serif;background:#0f1017;color:#e8e8ec;min-height:100dvh}
+  a{text-decoration:none;color:inherit}
+  button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
 </style>
 <link rel="stylesheet" href="/css/themes.css">
 <link rel="stylesheet" href="/css/base.css">
@@ -33,10 +35,46 @@
 <link rel="stylesheet" href="/css/modal.css">
 <style>
   .viewer-wrap{max-width:1000px;margin:0 auto;padding:32px 24px}
-  .viewer-header{margin-bottom:32px;text-align:center}
-  .viewer-title{font-size:24px;font-weight:700;margin-bottom:8px;letter-spacing:-.02em}
-  .viewer-meta{font-size:13px;color:var(--text3)}
-  .viewer-cta{margin-top:24px;text-align:center}
+
+  /* Header bar */
+  .viewer-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px}
+  .viewer-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text)}
+  .viewer-brand-name{font-size:15px;font-weight:600;letter-spacing:-0.02em}
+  .viewer-topbar-right{display:flex;align-items:center;gap:8px}
+  .viewer-topbar-link{padding:6px 12px;border-radius:var(--r-md);font-size:12px;font-weight:500;color:var(--text2);transition:all .15s}
+  .viewer-topbar-link:hover{color:var(--text);background:var(--surface)}
+
+  /* Title section */
+  .viewer-header{margin-bottom:28px}
+  .viewer-title{font-size:26px;font-weight:700;margin-bottom:8px;letter-spacing:-.02em;line-height:1.3}
+
+  /* Author + meta row */
+  .viewer-info{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .viewer-author{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)}
+  .viewer-author-pic{width:22px;height:22px;border-radius:50%;object-fit:cover}
+  .viewer-stats{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--text3)}
+  .viewer-stat{display:flex;align-items:center;gap:4px}
+  .viewer-stat svg{width:14px;height:14px}
+
+  /* Like button */
+  .like-btn{
+    display:flex;align-items:center;gap:6px;
+    padding:6px 14px;border-radius:var(--r-full);
+    font-size:12px;font-weight:500;color:var(--text2);
+    background:var(--surface);border:1px solid var(--border);
+    transition:all .2s var(--ease);
+  }
+  .like-btn:hover{border-color:var(--border2);background:var(--surface2);color:var(--text)}
+  .like-btn.liked{color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.08)}
+  .like-btn.liked:hover{background:rgba(248,113,113,.15)}
+  .like-btn svg{width:14px;height:14px;transition:transform .2s}
+  .like-btn.liked svg{fill:#f87171;color:#f87171}
+  .like-btn:active svg{transform:scale(1.2)}
+
+  /* Actions row */
+  .viewer-actions{display:flex;align-items:center;gap:10px;margin-top:14px}
+
+  .viewer-cta{margin-top:32px;text-align:center}
   .viewer-cta a{
     display:inline-flex;align-items:center;gap:8px;
     padding:10px 20px;border-radius:var(--r-md);
@@ -48,7 +86,7 @@
   .viewer-footer a{color:var(--text3)}
   .viewer-footer a:hover{color:var(--text2)}
 
-  /* Simple list view for published timelines */
+  /* Timeline display */
   .pub-timeline{margin-bottom:32px}
   .pub-tl-name{font-size:16px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px}
   .pub-tl-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
@@ -65,17 +103,48 @@
   .pub-ev-imp{font-size:10px;padding:2px 8px;border-radius:var(--r-full);background:var(--accent-bg);color:var(--accent)}
   .viewer-loading{text-align:center;padding:80px 0;color:var(--text3);font-size:14px}
   .viewer-error{text-align:center;padding:80px 0;color:var(--red);font-size:14px}
+
+  @media(max-width:768px){
+    .viewer-wrap{padding:20px 16px}
+    .viewer-title{font-size:20px}
+    .viewer-info{gap:10px}
+    .viewer-topbar{flex-direction:column;gap:10px;align-items:flex-start}
+  }
 </style>
 </head>
 <body>
   <div class="viewer-wrap">
+    <!-- Top bar -->
+    <div class="viewer-topbar">
+      <a href="/" class="viewer-brand">
+        <svg width="24" height="24" viewBox="0 0 48 48" fill="none">
+          <circle cx="24" cy="24" r="20" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+          <circle cx="24" cy="24" r="10" stroke="#6e7bf2" stroke-width="1.5"/>
+          <circle cx="24" cy="24" r="3" fill="#6e7bf2"/>
+        </svg>
+        <span class="viewer-brand-name">ChronoWeave</span>
+      </a>
+      <div class="viewer-topbar-right">
+        <a href="/discover" class="viewer-topbar-link">Discover</a>
+        <a href="/" class="viewer-topbar-link">Create</a>
+      </div>
+    </div>
+
+    <!-- Header -->
     <div class="viewer-header">
       <h1 class="viewer-title" id="viewerTitle">Loading...</h1>
-      <div class="viewer-meta" id="viewerMeta"></div>
+      <div class="viewer-info">
+        <div class="viewer-author" id="viewerAuthor"></div>
+        <div class="viewer-stats" id="viewerStats"></div>
+      </div>
+      <div class="viewer-actions" id="viewerActions"></div>
     </div>
+
+    <!-- Content -->
     <div id="viewerContent">
       <div class="viewer-loading">Loading timeline...</div>
     </div>
+
     <div class="viewer-cta">
       <a href="/">Create your own timeline with ChronoWeave</a>
     </div>
@@ -92,17 +161,84 @@
         return;
       }
 
+      let pubData = null;
+      const token = (() => { try { return localStorage.getItem('cw_token'); } catch { return null; } })();
+
       try {
         const resp = await fetch(`/api/p/${slug}`);
         if (!resp.ok) throw new Error('Timeline not found');
-        const pub = await resp.json();
+        pubData = await resp.json();
 
-        document.title = `${pub.title} — ChronoWeave`;
-        document.getElementById('viewerTitle').textContent = pub.title;
-        document.getElementById('viewerMeta').textContent = `Published ${new Date(pub.created_at).toLocaleDateString()}`;
+        document.title = `${pubData.title} — ChronoWeave`;
+        document.getElementById('viewerTitle').textContent = pubData.title;
 
+        // Author info
+        const authorEl = document.getElementById('viewerAuthor');
+        const authorPic = pubData.author_picture
+          ? `<img class="viewer-author-pic" src="${esc(pubData.author_picture)}" alt="" onerror="this.style.display='none'">`
+          : '';
+        authorEl.innerHTML = `${authorPic}<span>${esc(pubData.author_name || 'Anonymous')}</span>`;
+
+        // Stats
+        const statsEl = document.getElementById('viewerStats');
+        const date = new Date(pubData.created_at).toLocaleDateString('en-US', {
+          month: 'short', day: 'numeric', year: 'numeric'
+        });
+        const totalEvents = pubData.data.reduce((sum, tl) => sum + tl.events.length, 0);
+        statsEl.innerHTML = `
+          <span class="viewer-stat"><i data-lucide="eye" style="width:14px;height:14px"></i> ${pubData.view_count || 0}</span>
+          <span class="viewer-stat"><i data-lucide="layers" style="width:14px;height:14px"></i> ${totalEvents} events</span>
+          <span class="viewer-stat">${date}</span>
+        `;
+
+        // Like button + actions
+        const actionsEl = document.getElementById('viewerActions');
+        let likeStatus = { liked: false };
+        if (token) {
+          try {
+            const headers = { 'Authorization': `Bearer ${token}` };
+            const lr = await fetch(`/api/like/${pubData.id}`, { headers });
+            if (lr.ok) likeStatus = await lr.json();
+          } catch {}
+        }
+
+        actionsEl.innerHTML = `
+          <button class="like-btn${likeStatus.liked ? ' liked' : ''}" id="likeBtn">
+            <i data-lucide="heart" style="width:14px;height:14px"></i>
+            <span id="likeCount">${pubData.like_count || 0}</span>
+          </button>
+        `;
+
+        // Like button handler
+        document.getElementById('likeBtn').addEventListener('click', async () => {
+          if (!token) {
+            window.location.href = '/?login=1';
+            return;
+          }
+          const btn = document.getElementById('likeBtn');
+          const countEl = document.getElementById('likeCount');
+          try {
+            const resp = await fetch(`/api/like/${pubData.id}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            if (!resp.ok) throw new Error('Failed');
+            const result = await resp.json();
+            if (result.liked) {
+              btn.classList.add('liked');
+            } else {
+              btn.classList.remove('liked');
+            }
+            countEl.textContent = result.like_count;
+          } catch {}
+        });
+
+        // Render timeline content
         let html = '';
-        pub.data.forEach(tl => {
+        pubData.data.forEach(tl => {
           html += `<div class="pub-timeline">`;
           html += `<div class="pub-tl-name"><span class="pub-tl-dot" style="background:${tl.color}"></span>${esc(tl.name)}</div>`;
           tl.events.forEach(ev => {
@@ -123,6 +259,7 @@
         });
 
         document.getElementById('viewerContent').innerHTML = html;
+        lucide.createIcons();
       } catch (err) {
         document.getElementById('viewerTitle').textContent = 'Not Found';
         document.getElementById('viewerContent').innerHTML = `<div class="viewer-error">${err.message}</div>`;
