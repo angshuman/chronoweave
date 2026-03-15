@@ -2,49 +2,172 @@
  * ChronoWeave -- Vercel serverless catch-all handler.
  *
  * vercel.json rewrites /api/* to this function.
- * Parses the route and delegates to shared handlers in lib/routes.js.
+ * Parses the route and delegates to shared handlers in lib/.
  */
 
 const routes = require("../lib/routes");
+const { authMiddleware, requireAuth, handleGoogleLogin, handleGetMe, GOOGLE_CLIENT_ID, verifyToken, getUserById } = require("../lib/auth");
+const { TIERS, getBalance, getTransactions } = require("../lib/credits");
+const { createCheckoutSession, handleWebhook } = require("../lib/stripe");
+const { publishTimeline, getPublishedTimeline, listPublished, unpublishTimeline, exportYAML } = require("../lib/publish");
+
+/**
+ * Extract user from Authorization header (inline middleware for serverless).
+ */
+function extractUser(req) {
+  let token = null;
+  const authHeader = req.headers.authorization || "";
+  if (authHeader.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  } else {
+    // Check query param (for SSE/EventSource which can't set headers)
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    token = url.searchParams.get("token");
+  }
+  if (token) {
+    const decoded = verifyToken(token);
+    if (decoded) {
+      return getUserById(decoded.sub);
+    }
+  }
+  return null;
+}
 
 module.exports = async function handler(req, res) {
   // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.status(204).end();
 
   const url = new URL(req.url, `http://${req.headers.host}`);
   const parts = url.pathname.replace(/^\/api/, "").split("/").filter(Boolean);
-  // parts examples: ["sessions"], ["sessions","abc"], ["sessions","abc","timelines"],
-  //                  ["research"], ["merge"], ["unmerge"], ["timelines","abc"]
+
+  // Extract user for all requests
+  const user = extractUser(req);
+  req.user = user;
 
   try {
+    // == Auth routes ==
+
+    // POST /api/auth/google
+    if (req.method === "POST" && parts[0] === "auth" && parts[1] === "google") {
+      return handleGoogleLogin(req, res);
+    }
+
+    // GET /api/auth/me
+    if (req.method === "GET" && parts[0] === "auth" && parts[1] === "me") {
+      return handleGetMe(req, res);
+    }
+
+    // GET /api/auth/config
+    if (req.method === "GET" && parts[0] === "auth" && parts[1] === "config") {
+      return res.json({ google_client_id: GOOGLE_CLIENT_ID });
+    }
+
+    // == Credits routes ==
+
+    // GET /api/credits
+    if (req.method === "GET" && parts[0] === "credits" && !parts[1]) {
+      if (!user) return res.status(401).json({ detail: "Authentication required" });
+      return res.json({ credits: getBalance(user.id) });
+    }
+
+    // GET /api/credits/transactions
+    if (req.method === "GET" && parts[0] === "credits" && parts[1] === "transactions") {
+      if (!user) return res.status(401).json({ detail: "Authentication required" });
+      return res.json(getTransactions(user.id));
+    }
+
+    // GET /api/credits/tiers
+    if (req.method === "GET" && parts[0] === "credits" && parts[1] === "tiers") {
+      return res.json(TIERS);
+    }
+
+    // == Stripe routes ==
+
+    // POST /api/stripe/checkout
+    if (req.method === "POST" && parts[0] === "stripe" && parts[1] === "checkout") {
+      if (!user) return res.status(401).json({ detail: "Authentication required" });
+      const result = await createCheckoutSession(user.id, req.body?.tier_id);
+      return res.json(result);
+    }
+
+    // POST /api/stripe/webhook
+    if (req.method === "POST" && parts[0] === "stripe" && parts[1] === "webhook") {
+      // For Vercel, raw body is in req.body as a buffer if configured
+      const rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+      const result = await handleWebhook(rawBody, req.headers["stripe-signature"]);
+      return res.json(result);
+    }
+
+    // == Publish routes ==
+
+    // POST /api/publish
+    if (req.method === "POST" && parts[0] === "publish" && !parts[1]) {
+      if (!user) return res.status(401).json({ detail: "Authentication required" });
+      const result = publishTimeline(user.id, req.body?.session_id, req.body?.title);
+      return res.json(result);
+    }
+
+    // GET /api/published
+    if (req.method === "GET" && parts[0] === "published" && !parts[1]) {
+      if (!user) return res.status(401).json({ detail: "Authentication required" });
+      return res.json(listPublished(user.id));
+    }
+
+    // DELETE /api/published/:id
+    if (req.method === "DELETE" && parts[0] === "published" && parts[1]) {
+      if (!user) return res.status(401).json({ detail: "Authentication required" });
+      return res.json(unpublishTimeline(user.id, parts[1]));
+    }
+
+    // GET /api/p/:slug (public -- no auth)
+    if (req.method === "GET" && parts[0] === "p" && parts[1]) {
+      const pub = getPublishedTimeline(parts[1]);
+      if (!pub) return res.status(404).json({ detail: "Not found" });
+      return res.json(pub);
+    }
+
+    // == Export ==
+
+    // GET /api/export/:sessionId
+    if (req.method === "GET" && parts[0] === "export" && parts[1]) {
+      const { yaml, filename } = exportYAML(parts[1], user?.id);
+      res.setHeader("Content-Type", "text/yaml");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      return res.send(yaml);
+    }
+
+    // == Sessions ==
+
     // GET /api/sessions
     if (req.method === "GET" && parts[0] === "sessions" && !parts[1]) {
-      return res.json(routes.listSessions());
+      return res.json(routes.listSessions(user?.id));
     }
 
     // POST /api/sessions
     if (req.method === "POST" && parts[0] === "sessions" && !parts[1]) {
-      const s = routes.createSession(req.body?.name);
+      const s = routes.createSession(req.body?.name, user?.id);
       return res.status(201).json(s);
     }
 
     // DELETE /api/sessions/:sid
     if (req.method === "DELETE" && parts[0] === "sessions" && parts[1] && !parts[2]) {
-      return res.json(routes.deleteSession(parts[1]));
+      return res.json(routes.deleteSession(parts[1], user?.id));
     }
 
     // PUT /api/sessions/:sid
     if (req.method === "PUT" && parts[0] === "sessions" && parts[1] && !parts[2]) {
-      return res.json(routes.updateSession(parts[1], req.body?.name));
+      return res.json(routes.updateSession(parts[1], req.body?.name, user?.id));
     }
 
     // GET /api/sessions/:sid/timelines
     if (req.method === "GET" && parts[0] === "sessions" && parts[1] && parts[2] === "timelines") {
       return res.json(routes.listTimelines(parts[1]));
     }
+
+    // == Research ==
 
     // GET /api/research/stream (SSE streaming)
     if (req.method === "GET" && parts[0] === "research" && parts[1] === "stream") {
@@ -63,7 +186,7 @@ module.exports = async function handler(req, res) {
       };
       try {
         await routes.researchTopicStream(
-          { session_id, query, color },
+          { session_id, query, color, userId: user?.id },
           (type, data) => { if (!res.writableEnded) send(type, data); }
         );
       } catch (err) {
