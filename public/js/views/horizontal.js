@@ -54,8 +54,8 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
 
   function xPos(ts) { return mapping.posFunc(ts); }
 
-  // Gap break zones
-  const GAP_CLEARANCE_X = 56;
+  // Gap break zones — compact, just enough to avoid label collision
+  const GAP_CLEARANCE_X = 22;
   const gapZones = mapping.gapBreaks.map(gb => ({
     center: gb.pos,
     left: gb.pos - GAP_CLEARANCE_X,
@@ -206,48 +206,40 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     }
     if (skipLabel) continue;
 
-    // Year labels use the raw mapping position (not spread)
-    // but we need to offset by the average spread shift around this position
     const x = rawX;
-    const isMajor = y % (yearStep * 5) === 0 || y === majorStart || yearStep >= 10;
+    // Major: decade boundaries, first visible label, or large steps where every label counts
+    const isFirst = (wrap.querySelectorAll('.horiz-year-pill').length === 0);
+    const isMajor = y % 10 === 0 || isFirst || yearStep >= 5;
 
+    // Year pill label — sits centered on the axis line
     const lbl = document.createElement("div");
-    lbl.className = "horiz-year-label" + (isMajor ? " major" : "");
+    lbl.className = "horiz-year-pill" + (isMajor ? " major" : "");
     lbl.style.left = x + "px";
-    lbl.style.top = (axisY + 8) + "px";
-    lbl.style.transform = "translateX(-50%)";
+    lbl.style.top = axisY + "px";
     lbl.textContent = y;
     wrap.appendChild(lbl);
 
-    const tick = document.createElement("div");
-    tick.className = "horiz-year-tick" + (isMajor ? " major" : "");
-    tick.style.left = x + "px";
-    tick.style.top = (axisY - 8) + "px";
-    tick.style.transform = "none";
-    wrap.appendChild(tick);
-
-    if (isMajor) {
-      const guide = document.createElement("div");
-      guide.className = "horiz-year-guide";
-      guide.style.left = x + "px";
-      guide.style.top = "0";
-      guide.style.height = totalH + "px";
-      wrap.appendChild(guide);
-    }
+    // Vertical guide line for all years (stronger for major)
+    const guide = document.createElement("div");
+    guide.className = "horiz-year-guide" + (isMajor ? " major" : "");
+    guide.style.left = x + "px";
+    guide.style.top = "0";
+    guide.style.height = totalH + "px";
+    wrap.appendChild(guide);
   }
 
-  // -- Gap breaks --
+  // -- Gap breaks -- compact double-slash style
   mapping.gapBreaks.forEach(gb => {
     const br = document.createElement("div");
-    br.className = "gap-break-hz";
-    br.style.left = (gb.pos - 32) + "px";
-    br.style.top = (axisY - 28) + "px";
+    br.className = "gap-break-hz-v2";
+    br.style.left = gb.pos + "px";
+    br.style.top = (axisY - 12) + "px";
     br.innerHTML = `
-      <div class="gap-break-zone-h"></div>
-      <svg class="gap-break-zigzag-h" viewBox="0 0 64 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M4 28 L16 18 L28 38 L40 18 L52 38 L60 28" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="14" height="24" viewBox="0 0 14 24" fill="none">
+        <path d="M4 2L10 22" stroke="var(--text3)" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M1 2L7 22" stroke="var(--text3)" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
-      <span class="gap-break-pill-h">${gb.label}</span>
+      <span class="gap-pill-v2">${gb.label}</span>
     `;
     wrap.appendChild(br);
   });
