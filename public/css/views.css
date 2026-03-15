@@ -92,7 +92,7 @@
 
 /* Each event node -- dot on axis + connector + text */
 .tl-node{
-  position:absolute;cursor:pointer;
+  position:absolute;cursor:pointer;z-index:3;
   opacity:0;animation:fadeUp .3s var(--ease) forwards;transform:translateY(4px);
 }
 .tl-node:hover .tl-dot{transform:translate(-50%,-50%) scale(1.6)}
@@ -142,11 +142,12 @@
 
 /* === VERTICAL VIEW gap break === */
 .gap-break-v{
-  position:absolute;width:40px;height:64px;z-index:5;
+  position:absolute;width:40px;height:64px;z-index:2;
   display:flex;align-items:center;justify-content:center;
+  pointer-events:none;
 }
 .gap-break-zone{
-  position:absolute;inset:-10px -20px;
+  position:absolute;top:-10px;bottom:-10px;left:-12px;right:0;
   background:var(--bg);
   border-radius:var(--r-md);
   z-index:0;
@@ -170,11 +171,12 @@
 
 /* === HORIZONTAL VIEW gap break === */
 .gap-break-hz{
-  position:absolute;width:64px;height:56px;z-index:5;
+  position:absolute;width:64px;height:56px;z-index:2;
   display:flex;align-items:center;justify-content:center;
+  pointer-events:none;
 }
 .gap-break-zone-h{
-  position:absolute;inset:-8px -8px;
+  position:absolute;left:-8px;right:-8px;top:0;bottom:0;
   background:var(--bg);
   border-radius:var(--r-md);
   z-index:0;
@@ -268,7 +270,7 @@
 
 /* horiz-node + horiz-vconn + horiz-label */
 .horiz-node{
-  position:absolute;cursor:pointer;
+  position:absolute;cursor:pointer;z-index:3;
   opacity:0;animation:fadeIn .3s var(--ease) forwards;
 }
 .horiz-node:hover .tl-dot{transform:translate(-50%,-50%) scale(1.6)}
