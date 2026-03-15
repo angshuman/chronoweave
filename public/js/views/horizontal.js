@@ -94,13 +94,19 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     wrap.appendChild(tick);
   }
 
-  // Gap breaks -- // indicator on axis
+  // Gap breaks -- zig-zag break indicator on axis
   mapping.gapBreaks.forEach(gb => {
     const br = document.createElement("div");
-    br.className = "gap-break-h";
-    br.style.left = (gb.pos - 8) + "px";
-    br.style.top = (axisY - 24) + "px";
-    br.innerHTML = `<div class="gap-break-slash-h">//</div><span class="gap-break-label">${gb.label}</span>`;
+    br.className = "gap-break-hz";
+    br.style.left = (gb.pos - 32) + "px";
+    br.style.top = (axisY - 28) + "px";
+    br.innerHTML = `
+      <div class="gap-break-zone-h"></div>
+      <svg class="gap-break-zigzag-h" viewBox="0 0 64 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 28 L16 18 L28 38 L40 18 L52 38 L60 28" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="gap-break-pill-h">${gb.label}</span>
+    `;
     wrap.appendChild(br);
   });
 
