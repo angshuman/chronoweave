@@ -181,17 +181,17 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
     node.className = "tl-node";
     node.style.animationDelay = `${Math.min(i * 20, 400)}ms`;
 
-    // Dot on axis
+    // Dot on axis — placed at adjustedY to stay aligned with the text card
     const dot = document.createElement("div");
     dot.className = "tl-dot" + (sc.glow ? " glow" : "");
     dot.style.background = col;
     dot.style.width = sc.dotSize + "px";
     dot.style.height = sc.dotSize + "px";
     dot.style.left = AXIS_X + "px";
-    dot.style.top = y + "px";
+    dot.style.top = adjustedY + "px";
     node.appendChild(dot);
 
-    // Duration range bar
+    // Duration range bar — stays at the true temporal position
     if (isDuration && yEnd > y) {
       const range = document.createElement("div");
       range.className = "tl-range";
@@ -210,18 +210,6 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
     conn.style.width = CONN_LEN + "px";
     conn.style.top = adjustedY + "px";
     node.appendChild(conn);
-
-    // Vertical joiner if label was pushed down from its dot
-    if (Math.abs(adjustedY - y) > 2) {
-      const joiner = document.createElement("div");
-      joiner.className = "tl-conn";
-      joiner.style.background = col;
-      joiner.style.width = "1px";
-      joiner.style.height = Math.abs(adjustedY - y) + "px";
-      joiner.style.top = Math.min(y, adjustedY) + "px";
-      joiner.style.left = (AXIS_X + 2) + "px";
-      node.appendChild(joiner);
-    }
 
     // Text label
     const text = document.createElement("div");
