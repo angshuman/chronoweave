@@ -26,7 +26,7 @@ export async function doResearch(query) {
 
   es.addEventListener("intent", e => {
     const d = JSON.parse(e.data);
-    setIntent(d.intent, d.summary, d.search_queries);
+    setIntent(d.intent, d.summary);
   });
 
   es.addEventListener("search_progress", e => {
