@@ -52,6 +52,14 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
 
   function xPos(ts) { return mapping.posFunc(ts); }
 
+  // Collect gap break zones for collision avoidance
+  const GAP_CLEARANCE_X = 48;
+  const gapZones = mapping.gapBreaks.map(gb => ({
+    center: gb.pos,
+    left: gb.pos - GAP_CLEARANCE_X,
+    right: gb.pos + GAP_CLEARANCE_X,
+  }));
+
   const maxAboveLanes = 3;
   const halfHeight = maxAboveLanes * (LABEL_H + CONN_LEN_V) + 60;
   const totalH = halfHeight * 2;
@@ -67,7 +75,7 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
   axisEl.style.transform = "none";
   wrap.appendChild(axisEl);
 
-  // Year labels
+  // Year labels -- more prominent
   const minYear = new Date(minTs).getFullYear();
   const maxYear = new Date(maxTs).getFullYear();
   const yearStep = getYearStep(maxYear - minYear, S.zoom);
@@ -79,19 +87,43 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     const inGap = gaps.some(g => ts > g.startTs && ts < g.endTs);
     if (inGap) continue;
     const x = xPos(ts);
+
+    // Check if label would collide with gap zone
+    let skipLabel = false;
+    for (const gz of gapZones) {
+      if (Math.abs(x - gz.center) < GAP_CLEARANCE_X) {
+        skipLabel = true;
+        break;
+      }
+    }
+    if (skipLabel) continue;
+
+    const isMajor = y % (yearStep * 5) === 0 || y === majorStart || yearStep >= 10;
+
     const lbl = document.createElement("div");
-    lbl.className = "horiz-year-label";
+    lbl.className = "horiz-year-label" + (isMajor ? " major" : "");
     lbl.style.left = x + "px";
     lbl.style.top = axisY + "px";
-    lbl.style.transform = "translate(-50%, 12px)";
+    lbl.style.transform = "translate(-50%, 14px)";
     lbl.textContent = y;
     wrap.appendChild(lbl);
+
     const tick = document.createElement("div");
-    tick.className = "horiz-year-tick";
+    tick.className = "horiz-year-tick" + (isMajor ? " major" : "");
     tick.style.left = x + "px";
     tick.style.top = (axisY - 8) + "px";
     tick.style.transform = "none";
     wrap.appendChild(tick);
+
+    // Add vertical guide line for major years
+    if (isMajor) {
+      const guide = document.createElement("div");
+      guide.className = "horiz-year-guide";
+      guide.style.left = x + "px";
+      guide.style.top = "0";
+      guide.style.bottom = "0";
+      wrap.appendChild(guide);
+    }
   }
 
   // Gap breaks -- zig-zag break indicator on axis
@@ -110,9 +142,9 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     wrap.appendChild(br);
   });
 
-  // Build items
+  // Build items -- avoid placing items in gap zones
   const items = parsed.map((e, idx) => {
-    const x = xPos(e._start);
+    let x = xPos(e._start);
     const imp = e.importance || 5;
     return { evt: e, x, imp, idx, side: (idx % 2 === 0) ? "above" : "below", lane: 0 };
   });
