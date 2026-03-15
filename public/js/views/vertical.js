@@ -56,6 +56,14 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
 
   function yPos(ts) { return mapping.posFunc(ts); }
 
+  // Collect gap break zones for collision avoidance
+  const GAP_CLEARANCE = 48; // pixels above and below gap center to keep clear
+  const gapZones = mapping.gapBreaks.map(gb => ({
+    center: gb.pos,
+    top: gb.pos - GAP_CLEARANCE,
+    bottom: gb.pos + GAP_CLEARANCE,
+  }));
+
   // Axis
   const axis = document.createElement("div");
   axis.className = "linear-axis";
@@ -77,14 +85,21 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
     item.side = 1;
   });
 
-  // De-overlap: push events down if they are too close
-  for (let i = 1; i < items.length; i++) {
-    if (items[i].adjustedY - items[i - 1].adjustedY < MIN_Y_GAP) {
+  // De-overlap: push events down if they are too close OR in a gap zone
+  for (let i = 0; i < items.length; i++) {
+    // Check gap zone collision
+    for (const gz of gapZones) {
+      if (items[i].adjustedY >= gz.top && items[i].adjustedY <= gz.bottom) {
+        items[i].adjustedY = gz.bottom + 4;
+      }
+    }
+    // Check event-to-event overlap
+    if (i > 0 && items[i].adjustedY - items[i - 1].adjustedY < MIN_Y_GAP) {
       items[i].adjustedY = items[i - 1].adjustedY + MIN_Y_GAP;
     }
   }
 
-  // Year labels -- placed on the LEFT side of axis, check for event collision
+  // Year labels -- placed on the LEFT side of axis, prominent style
   const minYear = new Date(minTs).getFullYear();
   const maxYear = new Date(maxTs).getFullYear();
   const yearStep = getYearStep(maxYear - minYear, S.zoom);
@@ -98,19 +113,42 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
     const inGap = gaps.some(g => ts > g.startTs && ts < g.endTs);
     if (inGap) continue;
 
+    // Check if this label would collide with a gap zone
+    let skipLabel = false;
+    for (const gz of gapZones) {
+      if (Math.abs(top - gz.center) < GAP_CLEARANCE) {
+        skipLabel = true;
+        break;
+      }
+    }
+    if (skipLabel) continue;
+
+    // Determine if this is a "major" year (decade, century, etc.)
+    const isMajor = y % (yearStep * 5) === 0 || y === majorStart || yearStep >= 10;
+
     const lbl = document.createElement("div");
-    lbl.className = "linear-year-label";
+    lbl.className = "linear-year-label" + (isMajor ? " major" : "");
     lbl.style.top = top + "px";
-    lbl.style.left = (AXIS_X - 48) + "px";
-    lbl.style.width = "40px";
+    lbl.style.left = (AXIS_X - 56) + "px";
+    lbl.style.width = "48px";
     lbl.textContent = y;
     wrap.appendChild(lbl);
 
     const tick = document.createElement("div");
-    tick.className = "linear-year-tick";
+    tick.className = "linear-year-tick" + (isMajor ? " major" : "");
     tick.style.top = top + "px";
     tick.style.left = (AXIS_X - 6) + "px";
     wrap.appendChild(tick);
+
+    // Add a faint horizontal guide line across the full width for major years
+    if (isMajor) {
+      const guide = document.createElement("div");
+      guide.className = "linear-year-guide";
+      guide.style.top = top + "px";
+      guide.style.left = (AXIS_X + 2) + "px";
+      guide.style.right = "0";
+      wrap.appendChild(guide);
+    }
   }
 
   // Gap breaks -- zig-zag break indicator across axis
