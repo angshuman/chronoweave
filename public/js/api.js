@@ -2,12 +2,13 @@
 
 import { API } from './state.js';
 import { loaderBg, loaderText } from './dom.js';
+import { getToken } from './auth.js';
 
 export async function api(path, opts = {}) {
-  const r = await fetch(`${API}${path}`, {
-    headers: { "Content-Type": "application/json", ...opts.headers },
-    ...opts,
-  });
+  const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const r = await fetch(`${API}${path}`, { ...opts, headers });
   if (!r.ok) {
     const e = await r.json().catch(() => ({ detail: r.statusText }));
     throw new Error(e.detail || "Error");
