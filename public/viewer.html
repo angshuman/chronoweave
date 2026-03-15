@@ -20,35 +20,37 @@
 <title>ChronoWeave — Timeline</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.js"></script>
-<style>
-  .hidden{display:none !important}
-  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Inter',system-ui,sans-serif;background:#0f1017;color:#e8e8ec;min-height:100dvh}
-  a{text-decoration:none;color:inherit}
-  button{background:none;border:none;cursor:pointer;font:inherit;color:inherit}
-</style>
 <link rel="stylesheet" href="/css/themes.css">
 <link rel="stylesheet" href="/css/base.css">
 <link rel="stylesheet" href="/css/views.css">
 <link rel="stylesheet" href="/css/modal.css">
 <style>
-  .viewer-wrap{max-width:1000px;margin:0 auto;padding:32px 24px}
+  .hidden{display:none !important}
+  body{overflow-x:hidden}
 
-  /* Header bar */
-  .viewer-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px}
+  /* -- Viewer layout -- */
+  .viewer-wrap{max-width:100%;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column}
+
+  /* Top bar */
+  .viewer-topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 24px;border-bottom:1px solid var(--border);
+    background:var(--bg);position:sticky;top:0;z-index:50;
+  }
   .viewer-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text)}
   .viewer-brand-name{font-size:15px;font-weight:600;letter-spacing:-0.02em}
   .viewer-topbar-right{display:flex;align-items:center;gap:8px}
-  .viewer-topbar-link{padding:6px 12px;border-radius:var(--r-md);font-size:12px;font-weight:500;color:var(--text2);transition:all .15s}
+  .viewer-topbar-link{
+    padding:6px 12px;border-radius:var(--r-md);font-size:12px;font-weight:500;
+    color:var(--text2);transition:all .15s;
+  }
   .viewer-topbar-link:hover{color:var(--text);background:var(--surface)}
 
-  /* Title section */
-  .viewer-header{margin-bottom:28px}
-  .viewer-title{font-size:26px;font-weight:700;margin-bottom:8px;letter-spacing:-.02em;line-height:1.3}
-
-  /* Author + meta row */
+  /* Header section */
+  .viewer-header{padding:24px 24px 0;max-width:1000px;margin:0 auto;width:100%}
+  .viewer-title{font-size:24px;font-weight:700;margin-bottom:8px;letter-spacing:-.02em;line-height:1.3}
   .viewer-info{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
   .viewer-author{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)}
   .viewer-author-pic{width:22px;height:22px;border-radius:50%;object-fit:cover}
@@ -74,41 +76,50 @@
   /* Actions row */
   .viewer-actions{display:flex;align-items:center;gap:10px;margin-top:14px}
 
-  .viewer-cta{margin-top:32px;text-align:center}
+  /* View switcher - matches main app */
+  .view-switcher{
+    display:flex;align-items:center;gap:2px;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--r-md);padding:2px;margin-left:auto;
+  }
+  .view-btn{
+    padding:5px 12px;border-radius:var(--r-sm);font-size:12px;font-weight:500;
+    color:var(--text3);transition:all .15s;display:flex;align-items:center;gap:5px;
+  }
+  .view-btn:hover{color:var(--text2)}
+  .view-btn.active{background:var(--bg2);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  .view-btn svg{width:14px;height:14px}
+
+  /* Canvas area */
+  .viewer-canvas-wrap{
+    flex:1;overflow:auto;padding:20px 24px 40px;
+    position:relative;
+  }
+  .viewer-canvas{position:relative;min-height:300px}
+
+  /* Footer */
+  .viewer-cta{text-align:center;padding:24px 0 8px}
   .viewer-cta a{
     display:inline-flex;align-items:center;gap:8px;
     padding:10px 20px;border-radius:var(--r-md);
     font-size:13px;font-weight:500;color:var(--text);
-    background:var(--accent);transition:opacity .15s;
+    background:var(--accent);transition:opacity .15s;text-decoration:none;
   }
   .viewer-cta a:hover{opacity:.85}
-  .viewer-footer{text-align:center;padding:40px 0 20px;font-size:12px;color:var(--text3)}
-  .viewer-footer a{color:var(--text3)}
+  .viewer-footer{text-align:center;padding:12px 0 20px;font-size:12px;color:var(--text3)}
+  .viewer-footer a{color:var(--text3);text-decoration:none}
   .viewer-footer a:hover{color:var(--text2)}
 
-  /* Timeline display */
-  .pub-timeline{margin-bottom:32px}
-  .pub-tl-name{font-size:16px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px}
-  .pub-tl-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-  .pub-event{
-    padding:12px 16px;border-left:3px solid var(--border);margin-left:4px;
-    margin-bottom:2px;transition:background .12s;
-  }
-  .pub-event:hover{background:var(--surface)}
-  .pub-ev-date{font-size:11px;color:var(--text3);font-family:var(--mono);margin-bottom:2px}
-  .pub-ev-title{font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px}
-  .pub-ev-desc{font-size:13px;color:var(--text2);line-height:1.5}
-  .pub-ev-meta{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
-  .pub-ev-tag{font-size:10px;padding:2px 8px;border-radius:var(--r-full);background:var(--surface2);color:var(--text3)}
-  .pub-ev-imp{font-size:10px;padding:2px 8px;border-radius:var(--r-full);background:var(--accent-bg);color:var(--accent)}
   .viewer-loading{text-align:center;padding:80px 0;color:var(--text3);font-size:14px}
   .viewer-error{text-align:center;padding:80px 0;color:var(--red);font-size:14px}
 
   @media(max-width:768px){
-    .viewer-wrap{padding:20px 16px}
-    .viewer-title{font-size:20px}
+    .viewer-header{padding:16px}
+    .viewer-title{font-size:18px}
     .viewer-info{gap:10px}
-    .viewer-topbar{flex-direction:column;gap:10px;align-items:flex-start}
+    .viewer-canvas-wrap{padding:12px}
+    .view-switcher{margin-left:0;margin-top:8px}
+    .viewer-actions{flex-wrap:wrap}
   }
 </style>
 </head>
@@ -126,7 +137,7 @@
       </a>
       <div class="viewer-topbar-right">
         <a href="/discover" class="viewer-topbar-link">Discover</a>
-        <a href="/" class="viewer-topbar-link">Create</a>
+        <a href="/" class="viewer-topbar-link">Create your own</a>
       </div>
     </div>
 
@@ -137,12 +148,30 @@
         <div class="viewer-author" id="viewerAuthor"></div>
         <div class="viewer-stats" id="viewerStats"></div>
       </div>
-      <div class="viewer-actions" id="viewerActions"></div>
+      <div class="viewer-actions" id="viewerActions">
+        <button class="like-btn" id="likeBtn" style="display:none">
+          <i data-lucide="heart" style="width:14px;height:14px"></i>
+          <span id="likeCount">0</span>
+        </button>
+        <div class="view-switcher" id="viewSwitcher" style="display:none">
+          <button class="view-btn active" data-view="vertical">
+            <i data-lucide="arrow-down" style="width:14px;height:14px"></i> Vertical
+          </button>
+          <button class="view-btn" data-view="horizontal">
+            <i data-lucide="arrow-right" style="width:14px;height:14px"></i> Horizontal
+          </button>
+          <button class="view-btn" data-view="list">
+            <i data-lucide="list" style="width:14px;height:14px"></i> List
+          </button>
+        </div>
+      </div>
     </div>
 
-    <!-- Content -->
-    <div id="viewerContent">
-      <div class="viewer-loading">Loading timeline...</div>
+    <!-- Canvas for timeline views -->
+    <div class="viewer-canvas-wrap" id="canvasWrap">
+      <div class="viewer-canvas" id="viewerCanvas">
+        <div class="viewer-loading">Loading timeline...</div>
+      </div>
     </div>
 
     <div class="viewer-cta">
@@ -153,15 +182,99 @@
     </div>
   </div>
 
-  <script>
-    (async function() {
-      const slug = window.location.pathname.replace(/^\/p\//, '').replace(/\/$/, '');
-      if (!slug) {
-        document.getElementById('viewerContent').innerHTML = '<div class="viewer-error">No timeline specified</div>';
+  <!-- Event detail modal (matches structure expected by modal.js) -->
+  <div class="modal-bg hidden" id="modalBg">
+    <div class="modal" role="dialog">
+      <div class="modal-head"><h3 id="mTitle"></h3><button class="icon-btn" id="mClose" aria-label="Close"><i data-lucide="x" style="width:16px;height:16px"></i></button></div>
+      <div class="modal-body">
+        <div class="m-dates" id="mDates"></div>
+        <div class="m-desc" id="mDesc"></div>
+        <div class="m-imp-bar" id="mImpBar"><span class="m-imp-label">Importance</span><span class="m-imp-pips" id="mImpPips"></span></div>
+        <div class="m-sources" id="mSources"></div>
+        <div class="m-tags" id="mTags"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    // -- Stub modules for the view renderers --
+    // The views import from state.js, dom.js, modal.js etc.
+    // We provide those via a shim approach: dynamically rewrite imports.
+    // Instead, we'll inline the needed functions and call the views directly.
+
+    import { renderLinearView } from '/js/views/vertical.js';
+    import { renderHorizontalView } from '/js/views/horizontal.js';
+    import { renderListView } from '/js/views/list.js';
+
+    // -- State --
+    let pubData = null;
+    let allEvents = [];
+    let currentView = 'vertical';
+
+    const canvas = document.getElementById('viewerCanvas');
+    const canvasWrap = document.getElementById('canvasWrap');
+    const modalBg = document.getElementById('modalBg');
+
+    function esc(s) {
+      const el = document.createElement('span');
+      el.textContent = s || '';
+      return el.innerHTML;
+    }
+
+    // Render the current view
+    function renderView() {
+      canvas.innerHTML = '';
+      canvas.style.height = '';
+      canvas.style.minWidth = '';
+
+      if (!allEvents.length) {
+        canvas.innerHTML = '<div class="viewer-loading">No events found</div>';
         return;
       }
 
-      let pubData = null;
+      try {
+        if (currentView === 'vertical') {
+          renderLinearView(allEvents, 0, allEvents, canvas);
+        } else if (currentView === 'horizontal') {
+          renderHorizontalView(allEvents, 0, allEvents, canvas);
+        } else {
+          renderListView(allEvents, 0, canvas);
+        }
+      } catch (err) {
+        console.error('View render error:', err);
+        canvas.innerHTML = `<div class="viewer-error">Failed to render view: ${esc(err.message)}</div>`;
+      }
+    }
+
+    // -- View switcher --
+    document.querySelectorAll('.view-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentView = btn.dataset.view;
+        renderView();
+      });
+    });
+
+    // -- Modal close --
+    function closeModal() { modalBg.classList.add('hidden'); }
+    modalBg.addEventListener('click', (e) => {
+      if (e.target === modalBg) closeModal();
+    });
+    const mCloseBtn = document.getElementById('mClose');
+    if (mCloseBtn) mCloseBtn.addEventListener('click', closeModal);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    });
+
+    // -- Load data --
+    (async function() {
+      const slug = window.location.pathname.replace(/^\/p\//, '').replace(/\/$/, '');
+      if (!slug) {
+        canvas.innerHTML = '<div class="viewer-error">No timeline specified</div>';
+        return;
+      }
+
       const token = (() => { try { return localStorage.getItem('cw_token'); } catch { return null; } })();
 
       try {
@@ -191,84 +304,60 @@
           <span class="viewer-stat">${date}</span>
         `;
 
-        // Like button + actions
-        const actionsEl = document.getElementById('viewerActions');
-        let likeStatus = { liked: false };
+        // Like button
+        const likeBtn = document.getElementById('likeBtn');
+        const countEl = document.getElementById('likeCount');
+        countEl.textContent = pubData.like_count || 0;
+        likeBtn.style.display = '';
+
         if (token) {
           try {
-            const headers = { 'Authorization': `Bearer ${token}` };
-            const lr = await fetch(`/api/like/${pubData.id}`, { headers });
-            if (lr.ok) likeStatus = await lr.json();
+            const lr = await fetch(`/api/like/${pubData.id}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (lr.ok) {
+              const s = await lr.json();
+              if (s.liked) likeBtn.classList.add('liked');
+            }
           } catch {}
         }
 
-        actionsEl.innerHTML = `
-          <button class="like-btn${likeStatus.liked ? ' liked' : ''}" id="likeBtn">
-            <i data-lucide="heart" style="width:14px;height:14px"></i>
-            <span id="likeCount">${pubData.like_count || 0}</span>
-          </button>
-        `;
-
-        // Like button handler
-        document.getElementById('likeBtn').addEventListener('click', async () => {
-          if (!token) {
-            window.location.href = '/?login=1';
-            return;
-          }
-          const btn = document.getElementById('likeBtn');
-          const countEl = document.getElementById('likeCount');
+        likeBtn.addEventListener('click', async () => {
+          if (!token) { window.location.href = '/?login=1'; return; }
           try {
-            const resp = await fetch(`/api/like/${pubData.id}`, {
+            const r = await fetch(`/api/like/${pubData.id}`, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              }
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
             });
-            if (!resp.ok) throw new Error('Failed');
-            const result = await resp.json();
-            if (result.liked) {
-              btn.classList.add('liked');
-            } else {
-              btn.classList.remove('liked');
-            }
+            if (!r.ok) throw new Error('Failed');
+            const result = await r.json();
+            likeBtn.classList.toggle('liked', result.liked);
             countEl.textContent = result.like_count;
           } catch {}
         });
 
-        // Render timeline content
-        let html = '';
-        pubData.data.forEach(tl => {
-          html += `<div class="pub-timeline">`;
-          html += `<div class="pub-tl-name"><span class="pub-tl-dot" style="background:${tl.color}"></span>${esc(tl.name)}</div>`;
-          tl.events.forEach(ev => {
-            const dateStr = ev.end_date ? `${ev.start_date} → ${ev.end_date}` : ev.start_date;
-            const tags = (ev.tags || []).map(t => `<span class="pub-ev-tag">${esc(t)}</span>`).join('');
-            html += `<div class="pub-event" style="border-left-color:${ev.source_color || tl.color}">
-              <div class="pub-ev-date">${esc(dateStr)}</div>
-              <div class="pub-ev-title">${esc(ev.title)}</div>
-              <div class="pub-ev-desc">${esc(ev.description || '')}</div>
-              <div class="pub-ev-meta">
-                <span class="pub-ev-imp">★ ${ev.importance}/10</span>
-                ${ev.category ? `<span class="pub-ev-tag">${esc(ev.category)}</span>` : ''}
-                ${tags}
-              </div>
-            </div>`;
-          });
-          html += `</div>`;
-        });
+        // Show view switcher
+        document.getElementById('viewSwitcher').style.display = '';
 
-        document.getElementById('viewerContent').innerHTML = html;
+        // Flatten all events from all timelines, preserving source color
+        allEvents = pubData.data.flatMap(tl =>
+          tl.events.map(e => ({
+            ...e,
+            tags: JSON.stringify(e.tags || []),
+            source_color: e.source_color || tl.color,
+            source_timeline_name: e.source_timeline_name || tl.name,
+          }))
+        );
+
+        // Sort chronologically
+        allEvents.sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''));
+
+        // Render
+        renderView();
         lucide.createIcons();
       } catch (err) {
         document.getElementById('viewerTitle').textContent = 'Not Found';
-        document.getElementById('viewerContent').innerHTML = `<div class="viewer-error">${err.message}</div>`;
-      }
-
-      function esc(s) {
-        const el = document.createElement('span');
-        el.textContent = s || '';
-        return el.innerHTML;
+        canvas.innerHTML = `<div class="viewer-error">${esc(err.message)}</div>`;
       }
     })();
   </script>
