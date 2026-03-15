@@ -53,7 +53,8 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
   function xPos(ts) { return mapping.posFunc(ts); }
 
   // Collect gap break zones for collision avoidance
-  const GAP_CLEARANCE_X = 48;
+  // Gap break is 64px wide (centered), pill below adds width. Keep labels clear.
+  const GAP_CLEARANCE_X = 56;
   const gapZones = mapping.gapBreaks.map(gb => ({
     center: gb.pos,
     left: gb.pos - GAP_CLEARANCE_X,
@@ -142,10 +143,17 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     wrap.appendChild(br);
   });
 
-  // Build items -- avoid placing items in gap zones
+  // Build items -- nudge items away from gap zones
   const items = parsed.map((e, idx) => {
     let x = xPos(e._start);
     const imp = e.importance || 5;
+    // Nudge event positions out of gap zones
+    for (const gz of gapZones) {
+      if (x > gz.left && x < gz.right) {
+        // Push to whichever side is closer
+        x = (x < gz.center) ? gz.left : gz.right;
+      }
+    }
     return { evt: e, x, imp, idx, side: (idx % 2 === 0) ? "above" : "below", lane: 0 };
   });
 
