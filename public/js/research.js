@@ -5,7 +5,8 @@ import { reasoningPhase } from './dom.js';
 import {
   showReasoning, hideReasoning, appendToken,
   addEventPill, finalizeReasoning, reasoningError,
-  reasoningConnectionLost,
+  reasoningConnectionLost, setIntent, addSearchProgress,
+  searchComplete,
 } from './reasoning.js';
 import { loadTimelines } from './sessions.js';
 import { loadSessions } from './sessions.js';
@@ -21,6 +22,21 @@ export async function doResearch(query) {
   es.addEventListener("status", e => {
     const d = JSON.parse(e.data);
     reasoningPhase.textContent = d.message;
+  });
+
+  es.addEventListener("intent", e => {
+    const d = JSON.parse(e.data);
+    setIntent(d.intent, d.summary, d.search_queries);
+  });
+
+  es.addEventListener("search_progress", e => {
+    const d = JSON.parse(e.data);
+    addSearchProgress(d.message);
+  });
+
+  es.addEventListener("search_complete", e => {
+    const d = JSON.parse(e.data);
+    searchComplete(d.queries_completed, d.queries_total);
   });
 
   es.addEventListener("token", e => {
