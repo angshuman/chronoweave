@@ -8,7 +8,7 @@
 @keyframes reasonFadeIn{from{opacity:0}to{opacity:1}}
 
 .reasoning-panel{
-  width:min(620px, 90vw);max-height:80vh;
+  width:min(640px, 92vw);max-height:82vh;
   background:var(--bg2);border:1px solid var(--border);
   border-radius:var(--r-lg);overflow:hidden;
   display:flex;flex-direction:column;
@@ -49,24 +49,100 @@
 .reasoning-body{
   flex:1;overflow-y:auto;min-height:0;
   transition:max-height .3s var(--ease);
-  max-height:50vh;
+  max-height:54vh;
 }
 .reasoning-body.collapsed{max-height:0;overflow:hidden}
 
 .reasoning-stream{
-  padding:14px 18px;
-  font-family:var(--mono);font-size:12px;line-height:1.7;
-  color:var(--text2);white-space:pre-wrap;word-break:break-word;
-  min-height:60px;
+  padding:12px 16px;
+  display:flex;flex-direction:column;gap:8px;
+  min-height:80px;
 }
-.reasoning-stream .token-cursor{
-  display:inline-block;width:2px;height:14px;
-  background:var(--accent);vertical-align:text-bottom;
-  animation:blink 1s step-end infinite;
-  margin-left:1px;
-}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 
+/* -- Event cards in reasoning stream ------------------------------------ */
+.reasoning-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-md);padding:12px 14px;
+  opacity:0;animation:cardReveal .4s var(--ease) forwards;
+  transform:translateY(8px);
+  transition:border-color .15s var(--ease);
+}
+.reasoning-card:hover{border-color:var(--accent-bg)}
+@keyframes cardReveal{to{opacity:1;transform:translateY(0)}}
+
+.rc-header{
+  display:flex;align-items:center;gap:8px;margin-bottom:6px;
+}
+.rc-idx{
+  width:22px;height:22px;border-radius:50%;
+  background:var(--accent);color:#fff;
+  font-size:10px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.rc-date{
+  font-family:var(--mono);font-size:11px;color:var(--accent2);
+  letter-spacing:.02em;font-weight:500;
+}
+.rc-cat{
+  font-size:9px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;padding:2px 7px;border-radius:var(--r-sm);
+  background:var(--accent-bg);color:var(--accent);
+  margin-left:auto;
+}
+.rc-title{
+  font-size:13px;font-weight:600;color:var(--text);line-height:1.35;
+  margin-bottom:4px;
+}
+.rc-desc{
+  font-size:12px;color:var(--text2);line-height:1.5;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+}
+.rc-importance{
+  display:flex;gap:3px;margin-top:8px;
+}
+.rc-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--border);transition:background .15s;
+}
+.rc-dot.active{background:var(--accent)}
+
+/* -- Analyzing shimmer -------------------------------------------------- */
+.reasoning-analyzing{
+  display:flex;align-items:center;gap:12px;
+  padding:14px 16px;
+  border-radius:var(--r-md);
+  background:var(--surface);border:1px solid var(--border);
+  overflow:hidden;position:relative;
+}
+.ra-shimmer{
+  position:absolute;inset:0;
+  background:linear-gradient(90deg, transparent 0%, var(--accent-bg) 50%, transparent 100%);
+  animation:shimmer 2s ease-in-out infinite;
+}
+@keyframes shimmer{
+  0%{transform:translateX(-100%)}
+  100%{transform:translateX(100%)}
+}
+.ra-text{
+  position:relative;z-index:1;
+  font-size:12px;color:var(--text3);font-weight:500;
+}
+
+/* -- Completion summary ------------------------------------------------- */
+.reasoning-summary{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 14px;
+  border-radius:var(--r-md);
+  background:rgba(74,222,128,.06);
+  border:1px solid rgba(74,222,128,.15);
+  color:var(--green);font-size:12px;font-weight:500;
+  animation:cardReveal .4s var(--ease) forwards;
+  opacity:0;transform:translateY(8px);
+}
+.reasoning-summary svg{flex-shrink:0;color:var(--green)}
+
+/* -- Footer ------------------------------------------------------------- */
 .reasoning-footer{
   padding:12px 18px;border-top:1px solid var(--border);
   flex-shrink:0;
