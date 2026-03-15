@@ -15,6 +15,7 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const routes = require("./lib/routes");
+const { initDb } = require("./lib/db");
 const { authMiddleware, requireAuth, handleGoogleLogin, handleGetMe, GOOGLE_CLIENT_ID } = require("./lib/auth");
 const { TIERS, getBalance, getTransactions } = require("./lib/credits");
 const { createCheckoutSession, handleWebhook } = require("./lib/stripe");
@@ -63,12 +64,20 @@ app.get("/api/auth/config", (_req, res) => {
 });
 
 // -- Credits routes --------------------------------------------------------
-app.get("/api/credits", requireAuth, (req, res) => {
-  res.json({ credits: getBalance(req.user.id) });
+app.get("/api/credits", requireAuth, async (req, res) => {
+  try {
+    res.json({ credits: await getBalance(req.user.id) });
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
 });
 
-app.get("/api/credits/transactions", requireAuth, (req, res) => {
-  res.json(getTransactions(req.user.id));
+app.get("/api/credits/transactions", requireAuth, async (req, res) => {
+  try {
+    res.json(await getTransactions(req.user.id));
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
 });
 
 app.get("/api/credits/tiers", (_req, res) => {
@@ -87,34 +96,46 @@ app.post("/api/stripe/checkout", requireAuth, async (req, res) => {
 });
 
 // -- Sessions (user-scoped) ------------------------------------------------
-app.get("/api/sessions", (req, res) => {
-  res.json(routes.listSessions(req.user?.id));
-});
-
-app.post("/api/sessions", (req, res) => {
-  const s = routes.createSession(req.body.name, req.user?.id);
-  res.status(201).json(s);
-});
-
-app.delete("/api/sessions/:sid", (req, res) => {
+app.get("/api/sessions", async (req, res) => {
   try {
-    res.json(routes.deleteSession(req.params.sid, req.user?.id));
+    res.json(await routes.listSessions(req.user?.id));
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
+});
+
+app.post("/api/sessions", async (req, res) => {
+  try {
+    const s = await routes.createSession(req.body.name, req.user?.id);
+    res.status(201).json(s);
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
+});
+
+app.delete("/api/sessions/:sid", async (req, res) => {
+  try {
+    res.json(await routes.deleteSession(req.params.sid, req.user?.id));
   } catch (err) {
     res.status(err.status || 500).json({ detail: err.message });
   }
 });
 
-app.put("/api/sessions/:sid", (req, res) => {
+app.put("/api/sessions/:sid", async (req, res) => {
   try {
-    res.json(routes.updateSession(req.params.sid, req.body.name, req.user?.id));
+    res.json(await routes.updateSession(req.params.sid, req.body.name, req.user?.id));
   } catch (err) {
     res.status(err.status || 500).json({ detail: err.message });
   }
 });
 
 // -- Timelines -------------------------------------------------------------
-app.get("/api/sessions/:sid/timelines", (req, res) => {
-  res.json(routes.listTimelines(req.params.sid));
+app.get("/api/sessions/:sid/timelines", async (req, res) => {
+  try {
+    res.json(await routes.listTimelines(req.params.sid));
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
 });
 
 // -- Research (non-streaming fallback) -------------------------------------
@@ -172,52 +193,64 @@ app.post("/api/merge", async (req, res) => {
 });
 
 // -- Unmerge ---------------------------------------------------------------
-app.post("/api/unmerge", (req, res) => {
+app.post("/api/unmerge", async (req, res) => {
   try {
-    res.json(routes.unmergeTl(req.body.timeline_id));
+    res.json(await routes.unmergeTl(req.body.timeline_id));
   } catch (err) {
     res.status(err.status || 500).json({ detail: err.message });
   }
 });
 
 // -- Delete timeline -------------------------------------------------------
-app.delete("/api/timelines/:tid", (req, res) => {
-  res.json(routes.deleteTimeline(req.params.tid));
+app.delete("/api/timelines/:tid", async (req, res) => {
+  try {
+    res.json(await routes.deleteTimeline(req.params.tid));
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
 });
 
 // -- Publish routes --------------------------------------------------------
-app.post("/api/publish", requireAuth, (req, res) => {
+app.post("/api/publish", requireAuth, async (req, res) => {
   try {
-    const result = publishTimeline(req.user.id, req.body.session_id, req.body.title);
+    const result = await publishTimeline(req.user.id, req.body.session_id, req.body.title);
     res.json(result);
   } catch (err) {
     res.status(err.status || 500).json({ detail: err.message });
   }
 });
 
-app.get("/api/published", requireAuth, (req, res) => {
-  res.json(listPublished(req.user.id));
+app.get("/api/published", requireAuth, async (req, res) => {
+  try {
+    res.json(await listPublished(req.user.id));
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
 });
 
-app.delete("/api/published/:id", requireAuth, (req, res) => {
+app.delete("/api/published/:id", requireAuth, async (req, res) => {
   try {
-    res.json(unpublishTimeline(req.user.id, req.params.id));
+    res.json(await unpublishTimeline(req.user.id, req.params.id));
   } catch (err) {
     res.status(err.status || 500).json({ detail: err.message });
   }
 });
 
 // -- Public view (no auth required) ----------------------------------------
-app.get("/api/p/:slug", (req, res) => {
-  const pub = getPublishedTimeline(req.params.slug);
-  if (!pub) return res.status(404).json({ detail: "Not found" });
-  res.json(pub);
+app.get("/api/p/:slug", async (req, res) => {
+  try {
+    const pub = await getPublishedTimeline(req.params.slug);
+    if (!pub) return res.status(404).json({ detail: "Not found" });
+    res.json(pub);
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
 });
 
 // -- YAML Export -----------------------------------------------------------
-app.get("/api/export/:sessionId", (req, res) => {
+app.get("/api/export/:sessionId", async (req, res) => {
   try {
-    const { yaml, filename } = exportYAML(req.params.sessionId, req.user?.id);
+    const { yaml, filename } = await exportYAML(req.params.sessionId, req.user?.id);
     res.setHeader("Content-Type", "text/yaml");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send(yaml);
@@ -236,6 +269,16 @@ app.get("*", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`ChronoWeave server listening on http://localhost:${PORT}`);
-});
+// -- Start server (initialize DB first) ------------------------------------
+(async () => {
+  try {
+    await initDb();
+    console.log("[DB] Schema initialized");
+  } catch (err) {
+    console.error("[DB] Failed to initialize:", err.message);
+    process.exit(1);
+  }
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`ChronoWeave server listening on http://localhost:${PORT}`);
+  });
+})();
