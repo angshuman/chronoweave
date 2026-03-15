@@ -35,14 +35,17 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
   const PAD_LEFT = 60;
   const PAD_RIGHT = 60;
 
-  // Much tighter: reduce px-per-year significantly
   const totalYearsRaw = span / (365.25 * 24 * 3600 * 1000);
-  const basePxYear = totalYearsRaw > 100 ? 20 : totalYearsRaw > 50 ? 30 : totalYearsRaw > 20 ? 40 : totalYearsRaw > 10 ? 55 : 70;
+  // Scale px/year based on event density — more events need more room
+  const densityFactor = Math.min(1.3, Math.max(1, parsed.length / 15));
+  const basePxYear = (totalYearsRaw > 100 ? 20 : totalYearsRaw > 50 ? 30 : totalYearsRaw > 20 ? 40 : totalYearsRaw > 10 ? 55 : 70) * densityFactor;
   const PX_PER_YEAR_H = basePxYear * S.zoom;
   const basePxPerMs = PX_PER_YEAR_H / (365.25 * 24 * 3600 * 1000);
 
-  const CONN_LEN_V = 30;
-  const LABEL_H = 52; // enough for 2-line title + date
+  const LABEL_W = 140;
+  const LABEL_H = 56;
+  const CONN_BASE = 28;    // minimum connector length
+  const LANE_STEP = 62;    // vertical distance between lanes
 
   const gaps = detectGaps(parsed);
   const mapping = buildGapCroppedMapping(parsed, gaps, basePxPerMs, PAD_LEFT);
@@ -52,8 +55,7 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
 
   function xPos(ts) { return mapping.posFunc(ts); }
 
-  // Collect gap break zones for collision avoidance
-  // Gap break is 64px wide (centered), pill below adds width. Keep labels clear.
+  // Gap break zones for collision avoidance
   const GAP_CLEARANCE_X = 56;
   const gapZones = mapping.gapBreaks.map(gb => ({
     center: gb.pos,
@@ -61,22 +63,105 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     right: gb.pos + GAP_CLEARANCE_X,
   }));
 
-  const maxAboveLanes = 3;
-  const halfHeight = maxAboveLanes * (LABEL_H + CONN_LEN_V) + 60;
+  // -- Build items with positions --
+  const items = parsed.map((e, idx) => {
+    let x = xPos(e._start);
+    const imp = e.importance || 5;
+    // Nudge events out of gap zones
+    for (const gz of gapZones) {
+      if (x > gz.left && x < gz.right) {
+        x = (x < gz.center) ? gz.left : gz.right;
+      }
+    }
+    return { evt: e, x, imp, idx, side: null, lane: 0 };
+  });
+
+  // -- Stagger: assign side & lane using free-lane approach --
+  // Split into above and below, distributing to keep visual balance.
+  // Use a greedy "first lane that's free" approach so lanes get reused,
+  // creating a smooth wave rather than a climbing staircase.
+
+  const MIN_X_CLEAR = LABEL_W + 16; // horizontal clearance between labels on same lane
+
+  // Track occupied x-ranges per lane: { above: [[endX, ...], ...], below: [[endX, ...], ...] }
+  const lanesAbove = []; // each lane is an array of "rightEdge" x-values
+  const lanesBelow = [];
+
+  // Sort by x position for greedy assignment
+  const sorted = [...items].sort((a, b) => a.x - b.x);
+
+  // Alternate starting side, but allow the algorithm to pick the shorter lane
+  sorted.forEach((item, i) => {
+    const preferAbove = (i % 2 === 0);
+
+    const laneA = findFreeLaneH(lanesAbove, item.x, MIN_X_CLEAR);
+    const laneB = findFreeLaneH(lanesBelow, item.x, MIN_X_CLEAR);
+
+    // Pick the side with the lower available lane to keep things balanced
+    // But give slight preference to the alternating side
+    let chosenSide, chosenLane;
+
+    if (preferAbove) {
+      if (laneA <= laneB) {
+        chosenSide = "above"; chosenLane = laneA;
+      } else if (laneB < laneA - 1) {
+        chosenSide = "below"; chosenLane = laneB;
+      } else {
+        chosenSide = "above"; chosenLane = laneA;
+      }
+    } else {
+      if (laneB <= laneA) {
+        chosenSide = "below"; chosenLane = laneB;
+      } else if (laneA < laneB - 1) {
+        chosenSide = "above"; chosenLane = laneA;
+      } else {
+        chosenSide = "below"; chosenLane = laneB;
+      }
+    }
+
+    item.side = chosenSide;
+    item.lane = chosenLane;
+
+    // Mark lane as occupied up to rightEdge
+    const lanes = chosenSide === "above" ? lanesAbove : lanesBelow;
+    while (lanes.length <= chosenLane) lanes.push([]);
+    lanes[chosenLane].push(item.x + MIN_X_CLEAR);
+  });
+
+  /**
+   * Find the first lane where the item at xPos won't overlap.
+   * A lane is "free" if all previous items on it have rightEdge <= xPos.
+   */
+  function findFreeLaneH(lanes, xPos, minClear) {
+    for (let l = 0; l < lanes.length; l++) {
+      const rightEdges = lanes[l];
+      // Check if ALL entries on this lane are clear
+      const isFree = rightEdges.every(re => xPos >= re);
+      if (isFree) return l;
+    }
+    return lanes.length; // new lane needed
+  }
+
+  // Determine max lanes used
+  const maxLaneAbove = items.reduce((m, it) => it.side === "above" ? Math.max(m, it.lane) : m, 0);
+  const maxLaneBelow = items.reduce((m, it) => it.side === "below" ? Math.max(m, it.lane) : m, 0);
+  const maxLanes = Math.max(maxLaneAbove, maxLaneBelow) + 1;
+
+  const halfHeight = maxLanes * LANE_STEP + CONN_BASE + 40;
   const totalH = halfHeight * 2;
   const axisY = halfHeight;
 
   wrap.style.height = totalH + "px";
   wrap.style.minWidth = totalWidth + "px";
 
-  // Axis
+  // -- Axis line --
   const axisEl = document.createElement("div");
   axisEl.className = "horiz-axis";
   axisEl.style.top = axisY + "px";
   axisEl.style.transform = "none";
   wrap.appendChild(axisEl);
 
-  // Year labels -- more prominent
+  // -- Year labels --
   const minYear = new Date(minTs).getFullYear();
   const maxYear = new Date(maxTs).getFullYear();
   const yearStep = getYearStep(maxYear - minYear, S.zoom);
@@ -89,13 +174,9 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     if (inGap) continue;
     const x = xPos(ts);
 
-    // Check if label would collide with gap zone
     let skipLabel = false;
     for (const gz of gapZones) {
-      if (Math.abs(x - gz.center) < GAP_CLEARANCE_X) {
-        skipLabel = true;
-        break;
-      }
+      if (Math.abs(x - gz.center) < GAP_CLEARANCE_X) { skipLabel = true; break; }
     }
     if (skipLabel) continue;
 
@@ -116,7 +197,6 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     tick.style.transform = "none";
     wrap.appendChild(tick);
 
-    // Add vertical guide line for major years
     if (isMajor) {
       const guide = document.createElement("div");
       guide.className = "horiz-year-guide";
@@ -127,7 +207,7 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     }
   }
 
-  // Gap breaks -- zig-zag break indicator on axis
+  // -- Gap breaks --
   mapping.gapBreaks.forEach(gb => {
     const br = document.createElement("div");
     br.className = "gap-break-hz";
@@ -143,39 +223,7 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     wrap.appendChild(br);
   });
 
-  // Build items -- nudge items away from gap zones
-  const items = parsed.map((e, idx) => {
-    let x = xPos(e._start);
-    const imp = e.importance || 5;
-    // Nudge event positions out of gap zones
-    for (const gz of gapZones) {
-      if (x > gz.left && x < gz.right) {
-        // Push to whichever side is closer
-        x = (x < gz.center) ? gz.left : gz.right;
-      }
-    }
-    return { evt: e, x, imp, idx, side: (idx % 2 === 0) ? "above" : "below", lane: 0 };
-  });
-
-  // De-overlap: for items on same side, push to higher lanes if too close
-  const LABEL_W = 140;
-  const MIN_X_GAP = LABEL_W + 10;
-  const aboveItems = items.filter(it => it.side === "above").sort((a, b) => a.x - b.x);
-  const belowItems = items.filter(it => it.side === "below").sort((a, b) => a.x - b.x);
-
-  function dxDeOverlap(arr) {
-    for (let i = 1; i < arr.length; i++) {
-      if (arr[i].x - arr[i - 1].x < MIN_X_GAP) {
-        arr[i].lane = arr[i - 1].lane + 1;
-      } else {
-        arr[i].lane = 0; // reset lane if enough space
-      }
-    }
-  }
-  dxDeOverlap(aboveItems);
-  dxDeOverlap(belowItems);
-
-  // Render
+  // -- Render events --
   items.forEach((item, i) => {
     const { evt, x, imp, side, lane } = item;
     const col = evtColor(evt);
@@ -195,8 +243,8 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     dot.style.top = axisY + "px";
     node.appendChild(dot);
 
-    // Vertical connector
-    const connLen = CONN_LEN_V + lane * (LABEL_H + 4);
+    // Vertical connector — length based on lane
+    const connLen = CONN_BASE + lane * LANE_STEP;
     const vconn = document.createElement("div");
     vconn.className = "horiz-vconn";
     vconn.style.background = col;
@@ -210,7 +258,7 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     }
     node.appendChild(vconn);
 
-    // Text label -- allow wrapping, no truncation
+    // Text label
     const label = document.createElement("div");
     label.className = "horiz-label";
     label.style.left = x + "px";
