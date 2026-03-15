@@ -123,7 +123,7 @@ export function setIntent(intent, summary) {
     ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>'
     : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
 
-  const label = intent === 'research' ? 'New Research' : 'Refining Timeline';
+  const label = intent === 'research' ? 'New Research' : 'Follow-up';
   badge.innerHTML = `${icon}<span class="ri-label">${label}</span><span class="ri-summary">${esc(summary)}</span>`;
   reasoningStream.appendChild(badge);
   reasoningBody.scrollTop = reasoningBody.scrollHeight;
