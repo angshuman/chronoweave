@@ -1,6 +1,6 @@
 /* ChronoWeave -- Horizontal (Proportional) View */
 
-import { S, GAP_BREAK_SVG } from '../state.js';
+import { S } from '../state.js';
 import { esc } from '../utils.js';
 import { parseDate, fmtDateRange, evtColor, impScale, getYearStep } from '../helpers.js';
 import { detectGaps, buildGapCroppedMapping } from '../gaps.js';
@@ -34,10 +34,15 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
 
   const PAD_LEFT = 60;
   const PAD_RIGHT = 60;
-  const PX_PER_YEAR_H = 150 * S.zoom;
+
+  // Much tighter: reduce px-per-year significantly
+  const totalYearsRaw = span / (365.25 * 24 * 3600 * 1000);
+  const basePxYear = totalYearsRaw > 100 ? 20 : totalYearsRaw > 50 ? 30 : totalYearsRaw > 20 ? 40 : totalYearsRaw > 10 ? 55 : 70;
+  const PX_PER_YEAR_H = basePxYear * S.zoom;
   const basePxPerMs = PX_PER_YEAR_H / (365.25 * 24 * 3600 * 1000);
+
   const CONN_LEN_V = 30;
-  const LABEL_H = 40;
+  const LABEL_H = 52; // enough for 2-line title + date
 
   const gaps = detectGaps(parsed);
   const mapping = buildGapCroppedMapping(parsed, gaps, basePxPerMs, PAD_LEFT);
@@ -89,13 +94,13 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     wrap.appendChild(tick);
   }
 
-  // Gap breaks
+  // Gap breaks -- // indicator on axis
   mapping.gapBreaks.forEach(gb => {
     const br = document.createElement("div");
     br.className = "gap-break-h";
     br.style.left = (gb.pos - 8) + "px";
     br.style.top = (axisY - 24) + "px";
-    br.innerHTML = `${GAP_BREAK_SVG}<span class="gap-break-label">${gb.label}</span>`;
+    br.innerHTML = `<div class="gap-break-slash-h">//</div><span class="gap-break-label">${gb.label}</span>`;
     wrap.appendChild(br);
   });
 
@@ -106,15 +111,18 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     return { evt: e, x, imp, idx, side: (idx % 2 === 0) ? "above" : "below", lane: 0 };
   });
 
-  const MIN_X_GAP = 80;
-  const aboveItems = items.filter(it => it.side === "above");
-  const belowItems = items.filter(it => it.side === "below");
+  // De-overlap: for items on same side, push to higher lanes if too close
+  const LABEL_W = 140;
+  const MIN_X_GAP = LABEL_W + 10;
+  const aboveItems = items.filter(it => it.side === "above").sort((a, b) => a.x - b.x);
+  const belowItems = items.filter(it => it.side === "below").sort((a, b) => a.x - b.x);
 
   function dxDeOverlap(arr) {
-    arr.sort((a, b) => a.x - b.x);
     for (let i = 1; i < arr.length; i++) {
       if (arr[i].x - arr[i - 1].x < MIN_X_GAP) {
         arr[i].lane = arr[i - 1].lane + 1;
+      } else {
+        arr[i].lane = 0; // reset lane if enough space
       }
     }
   }
@@ -156,7 +164,7 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     }
     node.appendChild(vconn);
 
-    // Text label
+    // Text label -- allow wrapping, no truncation
     const label = document.createElement("div");
     label.className = "horiz-label";
     label.style.left = x + "px";

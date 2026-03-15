@@ -1,6 +1,10 @@
 /* ChronoWeave -- Gap Detection & Cropped Mapping */
 
-// Returns array of {afterIdx, startTs, endTs, label} for gaps to crop
+/**
+ * Detect gaps between events that should be compressed.
+ * More aggressive than before -- any gap > 2x the median AND > 6 months
+ * gets cropped, so timelines stay compact.
+ */
 export function detectGaps(parsedEvents) {
   if (parsedEvents.length < 2) return [];
 
@@ -18,8 +22,9 @@ export function detectGaps(parsedEvents) {
 
   const sorted = [...gaps].sort((a, b) => a.gapMs - b.gapMs);
   const median = sorted[Math.floor(sorted.length / 2)].gapMs;
-  const threshold = median * 3;
-  const minGap = 365.25 * 24 * 3600 * 1000;
+  // Aggressive: threshold = 2x median (was 3x), minimum 6 months (was 1 year)
+  const threshold = median * 2;
+  const minGap = 0.5 * 365.25 * 24 * 3600 * 1000; // 6 months
 
   return gaps
     .filter(g => g.gapMs > threshold && g.gapMs > minGap)
@@ -27,17 +32,20 @@ export function detectGaps(parsedEvents) {
       const years = g.gapMs / (365.25 * 24 * 3600 * 1000);
       let label;
       if (years >= 1) {
-        label = `${Math.round(years)} year${Math.round(years) !== 1 ? "s" : ""} skipped`;
+        label = `${Math.round(years)}y`;
       } else {
         const months = Math.round(years * 12);
-        label = `${months} month${months !== 1 ? "s" : ""} skipped`;
+        label = `${months}mo`;
       }
       return { afterIdx: g.idx, startTs: g.startTs, endTs: g.endTs, gapMs: g.gapMs, label };
     });
 }
 
-// Build a position mapping that compresses gaps into fixed-size breaks
-// Returns { posFunc(ts), totalSize, gapBreaks: [{pos, label}] }
+/**
+ * Build a position mapping that compresses gaps into fixed-size breaks.
+ * The break is visually indicated by a // mark on the axis.
+ * Returns { posFunc(ts), totalPx, gapBreaks: [{pos, label}] }
+ */
 export function buildGapCroppedMapping(parsedEvents, gaps, pxPerMsNormal, startOffset) {
   if (!gaps.length) {
     const minTs = parsedEvents[0]._start;
@@ -49,7 +57,7 @@ export function buildGapCroppedMapping(parsedEvents, gaps, pxPerMsNormal, startO
     };
   }
 
-  const GAP_PX = 40;
+  const GAP_PX = 32; // compact break indicator
   const minTs = parsedEvents[0]._start;
   const maxTs = Math.max(...parsedEvents.map(e => e._end || e._start));
 
