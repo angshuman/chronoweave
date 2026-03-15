@@ -57,7 +57,8 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
   function yPos(ts) { return mapping.posFunc(ts); }
 
   // Collect gap break zones for collision avoidance
-  const GAP_CLEARANCE = 48; // pixels above and below gap center to keep clear
+  // Gap break is 64px tall (centered), pill adds ~24px below, plus margin
+  const GAP_CLEARANCE = 58; // pixels above and below gap center to keep clear
   const gapZones = mapping.gapBreaks.map(gb => ({
     center: gb.pos,
     top: gb.pos - GAP_CLEARANCE,
