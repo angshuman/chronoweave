@@ -10,7 +10,7 @@ const { initDb } = require("../lib/db");
 const { authMiddleware, requireAuth, handleGoogleLogin, handleGetMe, GOOGLE_CLIENT_ID, verifyJwt, getUserById } = require("../lib/auth");
 const { TIERS, getBalance, getTransactions } = require("../lib/credits");
 const { createCheckoutSession, handleWebhook } = require("../lib/stripe");
-const { publishTimeline, getPublishedTimeline, listPublished, unpublishTimeline, exportYAML } = require("../lib/publish");
+const { publishTimeline, getPublishedTimeline, listPublished, discoverTimelines, toggleLike, getLikeStatus, unpublishTimeline, exportYAML } = require("../lib/publish");
 
 let _dbReady = false;
 
@@ -135,6 +135,23 @@ module.exports = async function handler(req, res) {
     if (req.method === "DELETE" && parts[0] === "published" && parts[1]) {
       if (!user) return res.status(401).json({ detail: "Authentication required" });
       return res.json(await unpublishTimeline(user.id, parts[1]));
+    }
+
+    // GET /api/discover (public -- no auth)
+    if (req.method === "GET" && parts[0] === "discover" && !parts[1]) {
+      const limit = parseInt(url.searchParams.get("limit") || "20", 10);
+      return res.json(await discoverTimelines(limit));
+    }
+
+    // POST /api/like/:id (toggle like -- requires auth)
+    if (req.method === "POST" && parts[0] === "like" && parts[1]) {
+      if (!user) return res.status(401).json({ detail: "Authentication required" });
+      return res.json(await toggleLike(user.id, parts[1]));
+    }
+
+    // GET /api/like/:id (check like status)
+    if (req.method === "GET" && parts[0] === "like" && parts[1]) {
+      return res.json(await getLikeStatus(user?.id, parts[1]));
     }
 
     // GET /api/p/:slug (public -- no auth)
