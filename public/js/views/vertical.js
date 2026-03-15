@@ -113,13 +113,19 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
     wrap.appendChild(tick);
   }
 
-  // Gap breaks -- rendered as // on the axis with label
+  // Gap breaks -- zig-zag break indicator across axis
   mapping.gapBreaks.forEach(gb => {
     const br = document.createElement("div");
-    br.className = "gap-break";
-    br.style.top = gb.pos + "px";
-    br.style.left = (AXIS_X - 6) + "px";
-    br.innerHTML = `<div class="gap-break-slash">//</div><span class="gap-break-label">${gb.label}</span>`;
+    br.className = "gap-break-v";
+    br.style.top = (gb.pos - 32) + "px";
+    br.style.left = (AXIS_X - 20) + "px";
+    br.innerHTML = `
+      <div class="gap-break-zone"></div>
+      <svg class="gap-break-zigzag" viewBox="0 0 40 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 4 L12 16 L28 28 L12 40 L28 52 L20 60" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="gap-break-pill">${gb.label}</span>
+    `;
     wrap.appendChild(br);
   });
 
