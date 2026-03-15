@@ -19,7 +19,7 @@ const { initDb } = require("./lib/db");
 const { authMiddleware, requireAuth, handleGoogleLogin, handleGetMe, GOOGLE_CLIENT_ID } = require("./lib/auth");
 const { TIERS, getBalance, getTransactions } = require("./lib/credits");
 const { createCheckoutSession, handleWebhook } = require("./lib/stripe");
-const { publishTimeline, getPublishedTimeline, listPublished, unpublishTimeline, exportYAML } = require("./lib/publish");
+const { publishTimeline, getPublishedTimeline, listPublished, discoverTimelines, toggleLike, getLikeStatus, unpublishTimeline, exportYAML } = require("./lib/publish");
 
 const PORT = parseInt(process.env.PORT || "8000", 10);
 const app = express();
@@ -236,6 +236,35 @@ app.delete("/api/published/:id", requireAuth, async (req, res) => {
   }
 });
 
+// -- Discover (public -- no auth required) ---------------------------------
+app.get("/api/discover", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit || "20", 10);
+    res.json(await discoverTimelines(limit));
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
+});
+
+// -- Like / Unlike (requires auth) -----------------------------------------
+app.post("/api/like/:id", requireAuth, async (req, res) => {
+  try {
+    const result = await toggleLike(req.user.id, req.params.id);
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ detail: err.message });
+  }
+});
+
+// -- Like status (public, but needs auth for status) -----------------------
+app.get("/api/like/:id", async (req, res) => {
+  try {
+    res.json(await getLikeStatus(req.user?.id, req.params.id));
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
+});
+
 // -- Public view (no auth required) ----------------------------------------
 app.get("/api/p/:slug", async (req, res) => {
   try {
@@ -262,6 +291,11 @@ app.get("/api/export/:sessionId", async (req, res) => {
 // -- Public timeline viewer ------------------------------------------------
 app.get("/p/:slug", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "viewer.html"));
+});
+
+// -- Discover page ---------------------------------------------------------
+app.get("/discover", (_req, res) => {
+  res.sendFile(path.join(__dirname, "public", "discover.html"));
 });
 
 // -- SPA fallback ----------------------------------------------------------
