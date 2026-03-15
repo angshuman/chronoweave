@@ -2,8 +2,9 @@
 
 /**
  * Detect gaps between events that should be compressed.
- * More aggressive than before -- any gap > 2x the median AND > 6 months
- * gets cropped, so timelines stay compact.
+ * Scales the minimum gap with the total span of the timeline so
+ * dense timelines (e.g. WW2, 12 years) don't get cluttered with
+ * tiny 7-month breaks. Caps results to the top 3 largest gaps.
  */
 export function detectGaps(parsedEvents) {
   if (parsedEvents.length < 2) return [];
@@ -22,14 +23,28 @@ export function detectGaps(parsedEvents) {
 
   const sorted = [...gaps].sort((a, b) => a.gapMs - b.gapMs);
   const median = sorted[Math.floor(sorted.length / 2)].gapMs;
-  // Aggressive: threshold = 2x median (was 3x), minimum 6 months (was 1 year)
-  const threshold = median * 2;
-  const minGap = 0.5 * 365.25 * 24 * 3600 * 1000; // 6 months
+  const threshold = median * 3;
 
-  return gaps
+  // Scale minimum gap with timeline span:
+  //  < 20 years → min 2 years
+  //  20-50 years → min 1 year
+  //  50-200 years → min 6 months
+  //  200+ years → min 6 months
+  const totalSpanMs = parsedEvents[parsedEvents.length - 1]._start - parsedEvents[0]._start;
+  const totalYears = totalSpanMs / (365.25 * 24 * 3600 * 1000);
+  const YEAR_MS = 365.25 * 24 * 3600 * 1000;
+  let minGap;
+  if (totalYears < 20) minGap = 2 * YEAR_MS;
+  else if (totalYears < 50) minGap = 1 * YEAR_MS;
+  else minGap = 0.5 * YEAR_MS;
+
+  const candidates = gaps
     .filter(g => g.gapMs > threshold && g.gapMs > minGap)
+    .sort((a, b) => b.gapMs - a.gapMs)
+    .slice(0, 3)   // cap at top 3 largest gaps
+    .sort((a, b) => a.startTs - b.startTs)
     .map(g => {
-      const years = g.gapMs / (365.25 * 24 * 3600 * 1000);
+      const years = g.gapMs / YEAR_MS;
       let label;
       if (years >= 1) {
         label = `${Math.round(years)}y`;
@@ -39,6 +54,8 @@ export function detectGaps(parsedEvents) {
       }
       return { afterIdx: g.idx, startTs: g.startTs, endTs: g.endTs, gapMs: g.gapMs, label };
     });
+
+  return candidates;
 }
 
 /**
@@ -57,7 +74,7 @@ export function buildGapCroppedMapping(parsedEvents, gaps, pxPerMsNormal, startO
     };
   }
 
-  const GAP_PX = 80; // generous space for zig-zag break indicator + text clearance
+  const GAP_PX = 36; // compact space for break indicator
   const minTs = parsedEvents[0]._start;
   const maxTs = Math.max(...parsedEvents.map(e => e._end || e._start));
 
