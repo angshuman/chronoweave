@@ -33,16 +33,16 @@ export function fmtDateRange(evt) {
   const start = fmtDate(evt.start_date);
   if (!evt.end_date || evt.end_date === evt.start_date) return start;
   const end = fmtDate(evt.end_date);
-  return `${start} -> ${end}`;
+  return `${start} → ${end}`;
 }
 
 // -- Event color ------------------------------------------------------------
 
 export function evtColor(evt) {
   if (evt.source_color && evt.source_color.startsWith("[")) {
-    try { return JSON.parse(evt.source_color)[0] || evt._tl.color; } catch { /* ignore */ }
+    try { return JSON.parse(evt.source_color)[0] || (evt._tl ? evt._tl.color : '#6e7bf2'); } catch { /* ignore */ }
   }
-  return evt.source_color || evt._tl.color;
+  return evt.source_color || (evt._tl ? evt._tl.color : '#6e7bf2');
 }
 
 // -- Source dots / labels (for merged events) -------------------------------
@@ -80,7 +80,7 @@ export function sourceLabel(evt) {
       return `<span class="list-source-label">From: ${srcs.map(s => s.name || s).join(", ")}</span>`;
     } catch { /* ignore */ }
   }
-  if (evt._tl.is_merged && evt.source_timeline_name && !evt.source_timeline_name.startsWith("[")) {
+  if (evt._tl && evt._tl.is_merged && evt.source_timeline_name && !evt.source_timeline_name.startsWith("[")) {
     return `<span class="list-source-label">From: ${esc(evt.source_timeline_name)}</span>`;
   }
   return "";
