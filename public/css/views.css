@@ -208,13 +208,14 @@
 
 /* Horizontal year labels -- default (minor) */
 .horiz-year-label{
-  position:absolute;top:50%;transform:translateY(10px);
-  font-family:var(--mono);font-size:12px;color:var(--text3);font-weight:600;
+  position:absolute;
+  font-family:var(--mono);font-size:11px;color:var(--text3);font-weight:600;
   letter-spacing:-.01em;white-space:nowrap;
+  z-index:2;
 }
 /* Major year labels -- bigger and more prominent */
 .horiz-year-label.major{
-  font-size:15px;font-weight:800;color:var(--accent);
+  font-size:14px;font-weight:800;color:var(--accent);
   letter-spacing:-.02em;
 }
 
@@ -273,8 +274,10 @@
   position:absolute;cursor:pointer;z-index:3;
   opacity:0;animation:fadeIn .3s var(--ease) forwards;
 }
+.horiz-node:hover{z-index:20}
 .horiz-node:hover .tl-dot{transform:translate(-50%,-50%) scale(1.6)}
 .horiz-node:hover .htl-title{color:var(--accent)}
+.horiz-node:hover .horiz-label{background:var(--surface);border-radius:var(--r-sm);padding:2px 6px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
 .horiz-node .tl-dot{
   position:absolute;border-radius:50%;z-index:3;
   transform:translate(-50%,-50%);
@@ -285,7 +288,7 @@
   position:absolute;width:1px;z-index:1;opacity:.5;
 }
 .horiz-label{
-  position:absolute;text-align:center;width:140px;
+  position:absolute;text-align:center;width:130px;
 }
 .htl-title{
   font-weight:600;color:var(--text);font-size:11px;line-height:1.25;
