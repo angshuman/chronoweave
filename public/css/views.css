@@ -4,6 +4,30 @@
   content:'';position:absolute;left:4px;top:0;bottom:0;
   width:2px;background:var(--border);border-radius:1px;
 }
+
+/* Year section headers in list view */
+.list-year-header{
+  display:flex;align-items:center;gap:12px;
+  padding:16px 0 8px 0;position:relative;
+}
+.list-year-header:first-child{padding-top:8px}
+.list-year-line{
+  flex:1;height:1px;
+  background:linear-gradient(90deg, var(--accent) 0%, transparent 100%);
+  opacity:.25;
+}
+.list-year-line:last-child{
+  background:linear-gradient(90deg, transparent 0%, var(--accent) 100%);
+  opacity:.15;
+}
+.list-year-label{
+  font-family:var(--mono);font-size:16px;font-weight:800;
+  color:var(--accent);letter-spacing:-.02em;
+  padding:3px 12px;border-radius:var(--r-sm);
+  background:var(--accent-bg);
+  white-space:nowrap;flex-shrink:0;
+}
+
 .list-ev{
   position:relative;padding:6px 0;cursor:pointer;
   opacity:0;animation:fadeUp .3s var(--ease) forwards;transform:translateY(6px);
@@ -34,18 +58,36 @@
   position:absolute;top:0;bottom:0;width:2px;
   background:var(--border);border-radius:1px;
 }
+
+/* Year labels -- default (minor) */
 .linear-year-label{
   position:absolute;text-align:right;
   font-family:var(--mono);font-size:12px;color:var(--text3);font-weight:600;
   letter-spacing:-.01em;transform:translateY(-8px);
 }
+/* Major year labels -- bigger and more prominent */
+.linear-year-label.major{
+  font-size:15px;font-weight:800;color:var(--accent);
+  letter-spacing:-.02em;
+}
+
 .linear-year-tick{
   position:absolute;width:12px;height:2px;
   background:var(--accent);border-radius:1px;opacity:.5;
 }
+.linear-year-tick.major{
+  width:16px;height:3px;opacity:.8;
+}
 .linear-year-tick-minor{
   position:absolute;width:6px;height:1px;
   background:var(--border2);
+}
+
+/* Faint horizontal guide line for major years */
+.linear-year-guide{
+  position:absolute;height:1px;
+  background:var(--accent);opacity:.06;
+  pointer-events:none;
 }
 
 /* Each event node -- dot on axis + connector + text */
@@ -104,7 +146,7 @@
   display:flex;align-items:center;justify-content:center;
 }
 .gap-break-zone{
-  position:absolute;inset:-6px -16px;
+  position:absolute;inset:-10px -20px;
   background:var(--bg);
   border-radius:var(--r-md);
   z-index:0;
@@ -117,7 +159,7 @@
 }
 .gap-break-pill{
   position:absolute;z-index:2;
-  left:50%;bottom:-16px;transform:translateX(-50%);
+  left:50%;bottom:-20px;transform:translateX(-50%);
   font-family:var(--mono);font-size:9px;font-weight:600;
   color:var(--text3);background:var(--surface);
   padding:2px 7px;border-radius:var(--r-full);
@@ -132,7 +174,7 @@
   display:flex;align-items:center;justify-content:center;
 }
 .gap-break-zone-h{
-  position:absolute;inset:-6px -4px;
+  position:absolute;inset:-8px -8px;
   background:var(--bg);
   border-radius:var(--r-md);
   z-index:0;
@@ -145,7 +187,7 @@
 }
 .gap-break-pill-h{
   position:absolute;z-index:2;
-  bottom:-18px;left:50%;transform:translateX(-50%);
+  bottom:-22px;left:50%;transform:translateX(-50%);
   font-family:var(--mono);font-size:10px;font-weight:600;
   color:var(--text3);background:var(--surface);
   padding:2px 8px;border-radius:var(--r-full);
@@ -161,16 +203,35 @@
   height:3px;background:var(--border);border-radius:2px;
   transform:translateY(-1px);
 }
+
+/* Horizontal year labels -- default (minor) */
 .horiz-year-label{
   position:absolute;top:50%;transform:translateY(10px);
   font-family:var(--mono);font-size:12px;color:var(--text3);font-weight:600;
   letter-spacing:-.01em;white-space:nowrap;
 }
+/* Major year labels -- bigger and more prominent */
+.horiz-year-label.major{
+  font-size:15px;font-weight:800;color:var(--accent);
+  letter-spacing:-.02em;
+}
+
 .horiz-year-tick{
   position:absolute;top:50%;width:2px;height:16px;
   background:var(--accent);opacity:.5;border-radius:1px;
   transform:translateY(-8px);
 }
+.horiz-year-tick.major{
+  width:3px;height:20px;opacity:.8;
+}
+
+/* Faint vertical guide line for major years */
+.horiz-year-guide{
+  position:absolute;width:1px;
+  background:var(--accent);opacity:.06;
+  pointer-events:none;
+}
+
 .horiz-ev{
   position:absolute;
   opacity:0;animation:fadeIn .35s var(--ease) forwards;
