@@ -1,0 +1,290 @@
+/* ChronoWeave -- Discover Page Styles */
+
+.discover-wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 24px 60px;
+  min-height: 100dvh;
+}
+
+/* -- Header --------------------------------------------------------------- */
+.discover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 40px;
+}
+.discover-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: var(--text);
+}
+.discover-brand svg {
+  flex-shrink: 0;
+}
+.discover-brand-name {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.discover-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.discover-nav-link {
+  padding: 7px 14px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  text-decoration: none;
+  transition: all 0.15s var(--ease);
+  border: 1px solid transparent;
+}
+.discover-nav-link:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+.discover-nav-link.active {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--border);
+}
+.discover-nav-cta {
+  padding: 7px 16px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 500;
+  color: white;
+  background: var(--accent);
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.discover-nav-cta:hover {
+  opacity: 0.85;
+}
+
+/* -- Hero ----------------------------------------------------------------- */
+.discover-hero {
+  text-align: center;
+  margin-bottom: 48px;
+  padding: 0 20px;
+}
+.discover-hero h1 {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+.discover-hero p {
+  font-size: 15px;
+  color: var(--text2);
+  max-width: 480px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* -- Section -------------------------------------------------------------- */
+.discover-section {
+  margin-bottom: 48px;
+}
+.discover-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.discover-section-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.discover-section-title svg {
+  color: var(--accent);
+}
+.discover-section-count {
+  font-size: 12px;
+  color: var(--text3);
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+  background: var(--surface);
+}
+
+/* -- Timeline Cards Grid -------------------------------------------------- */
+.discover-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.timeline-card {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  text-decoration: none;
+  color: var(--text);
+  transition: all 0.2s var(--ease);
+  position: relative;
+  overflow: hidden;
+}
+.timeline-card:hover {
+  border-color: var(--border2);
+  background: var(--surface2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.tc-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.4;
+}
+.tc-desc {
+  font-size: 12px;
+  color: var(--text3);
+  margin-bottom: 14px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.5;
+  flex: 1;
+}
+.tc-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text3);
+}
+.tc-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.tc-author-pic {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.tc-author-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tc-stat {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.tc-stat svg {
+  width: 12px;
+  height: 12px;
+}
+.tc-badges {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.tc-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: var(--accent-bg);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* -- Empty State ---------------------------------------------------------- */
+.discover-empty {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--text3);
+  font-size: 14px;
+}
+.discover-empty svg {
+  margin-bottom: 12px;
+  color: var(--text3);
+  opacity: 0.5;
+}
+.discover-empty p {
+  margin-bottom: 16px;
+}
+.discover-empty a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.discover-empty a:hover {
+  text-decoration: underline;
+}
+
+/* -- Footer --------------------------------------------------------------- */
+.discover-footer {
+  text-align: center;
+  padding: 40px 0 20px;
+  font-size: 12px;
+  color: var(--text3);
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+}
+.discover-footer a {
+  color: var(--text3);
+  text-decoration: none;
+}
+.discover-footer a:hover {
+  color: var(--text2);
+}
+
+/* -- Loading -------------------------------------------------------------- */
+.discover-loading {
+  text-align: center;
+  padding: 60px 0;
+  color: var(--text3);
+  font-size: 14px;
+}
+.discover-loading .loader-ring {
+  margin: 0 auto 12px;
+}
+
+/* -- Responsive ----------------------------------------------------------- */
+@media (max-width: 768px) {
+  .discover-wrap {
+    padding: 20px 16px 40px;
+  }
+  .discover-hero h1 {
+    font-size: 24px;
+  }
+  .discover-grid {
+    grid-template-columns: 1fr;
+  }
+  .discover-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .discover-nav {
+    flex-wrap: wrap;
+  }
+}
