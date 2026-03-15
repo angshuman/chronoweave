@@ -32,7 +32,7 @@ export function openModal(evt) {
         srcEl.appendChild(it);
       });
     } catch { /* ignore */ }
-  } else if (evt._tl.is_merged && evt.source_timeline_name) {
+  } else if (evt._tl && evt._tl.is_merged && evt.source_timeline_name) {
     const it = document.createElement("span");
     it.className = "m-src-item";
     it.innerHTML = `<span class="m-src-dot" style="background:${evt.source_color || "#6e7bf2"}"></span>${esc(evt.source_timeline_name)}`;
