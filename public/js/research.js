@@ -68,7 +68,7 @@ export async function doResearch(query) {
   });
 
   es.addEventListener("error", e => {
-    let msg = "Connection error";
+    let msg = "Something went wrong";
     let code = null;
     try {
       if (e.data) {
@@ -95,6 +95,6 @@ export async function doResearch(query) {
   es.onerror = () => {
     if (es.readyState === EventSource.CLOSED) return;
     es.close();
-    reasoningConnectionLost();
+    reasoningError("Lost connection to server. Please try again.");
   };
 }
