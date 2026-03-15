@@ -124,8 +124,9 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
     }
     if (skipLabel) continue;
 
-    // Determine if this is a "major" year (decade, century, etc.)
-    const isMajor = y % (yearStep * 5) === 0 || y === majorStart || yearStep >= 10;
+    // Major: decade/century boundaries, first visible year, or large step sizes
+    const isFirstLabel = (wrap.querySelectorAll('.linear-year-label').length === 0);
+    const isMajor = y % 10 === 0 || isFirstLabel || yearStep >= 5;
 
     const lbl = document.createElement("div");
     lbl.className = "linear-year-label" + (isMajor ? " major" : "");
