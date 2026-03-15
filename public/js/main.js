@@ -9,9 +9,17 @@ import { doMerge } from './merge.js';
 import { zoomIn, zoomOut, zoomFit } from './zoom.js';
 import { setMinImportance } from './density.js';
 import { renderView } from './render.js';
+import { initAuth, setOnAuthChange } from './auth.js';
+import { initAccountUI, renderAuth } from './account.js';
 
-// Wire the circular dependency: sessions -> research
+// Wire the circular dependency: sessions → research
 setResearchFn(doResearch);
+
+// Auth state changes → re-render auth UI + reload sessions
+setOnAuthChange((user) => {
+  renderAuth();
+  loadSessions();
+});
 
 // -- Event Listeners ---------------------------------------------------------
 
@@ -71,7 +79,28 @@ densityDropdown.querySelectorAll(".dd-item").forEach(b => b.addEventListener("cl
 }));
 document.addEventListener("click", () => densityDropdown.classList.add("hidden"));
 
+// Check for payment success/cancel in URL
+function checkPaymentStatus() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("payment") === "success") {
+    const credits = params.get("credits");
+    const toast = document.createElement("div");
+    toast.className = "cw-toast cw-toast-show";
+    toast.textContent = `Payment successful! ${credits} credits added.`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+    // Clean URL
+    window.history.replaceState({}, "", window.location.pathname);
+  } else if (params.get("payment") === "cancelled") {
+    window.history.replaceState({}, "", window.location.pathname);
+  }
+}
+
 // -- Init -------------------------------------------------------------------
 initTheme();
 lucide.createIcons();
-loadSessions();
+initAccountUI();
+initAuth().then(() => {
+  loadSessions();
+  checkPaymentStatus();
+});
