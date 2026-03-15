@@ -6,15 +6,27 @@
  */
 
 const routes = require("../lib/routes");
-const { authMiddleware, requireAuth, handleGoogleLogin, handleGetMe, GOOGLE_CLIENT_ID, verifyToken, getUserById } = require("../lib/auth");
+const { initDb } = require("../lib/db");
+const { authMiddleware, requireAuth, handleGoogleLogin, handleGetMe, GOOGLE_CLIENT_ID, verifyJwt, getUserById } = require("../lib/auth");
 const { TIERS, getBalance, getTransactions } = require("../lib/credits");
 const { createCheckoutSession, handleWebhook } = require("../lib/stripe");
 const { publishTimeline, getPublishedTimeline, listPublished, unpublishTimeline, exportYAML } = require("../lib/publish");
 
+let _dbReady = false;
+
+/**
+ * Ensure DB schema is initialized (runs once per cold start).
+ */
+async function ensureDb() {
+  if (_dbReady) return;
+  await initDb();
+  _dbReady = true;
+}
+
 /**
  * Extract user from Authorization header (inline middleware for serverless).
  */
-function extractUser(req) {
+async function extractUser(req) {
   let token = null;
   const authHeader = req.headers.authorization || "";
   if (authHeader.startsWith("Bearer ")) {
@@ -25,9 +37,9 @@ function extractUser(req) {
     token = url.searchParams.get("token");
   }
   if (token) {
-    const decoded = verifyToken(token);
+    const decoded = verifyJwt(token);
     if (decoded) {
-      return getUserById(decoded.sub);
+      return await getUserById(decoded.sub);
     }
   }
   return null;
@@ -40,11 +52,14 @@ module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.status(204).end();
 
+  // Initialize DB on first request (cold start)
+  await ensureDb();
+
   const url = new URL(req.url, `http://${req.headers.host}`);
   const parts = url.pathname.replace(/^\/api/, "").split("/").filter(Boolean);
 
   // Extract user for all requests
-  const user = extractUser(req);
+  const user = await extractUser(req);
   req.user = user;
 
   try {
@@ -52,7 +67,7 @@ module.exports = async function handler(req, res) {
 
     // POST /api/auth/google
     if (req.method === "POST" && parts[0] === "auth" && parts[1] === "google") {
-      return handleGoogleLogin(req, res);
+      return await handleGoogleLogin(req, res);
     }
 
     // GET /api/auth/me
@@ -70,13 +85,13 @@ module.exports = async function handler(req, res) {
     // GET /api/credits
     if (req.method === "GET" && parts[0] === "credits" && !parts[1]) {
       if (!user) return res.status(401).json({ detail: "Authentication required" });
-      return res.json({ credits: getBalance(user.id) });
+      return res.json({ credits: await getBalance(user.id) });
     }
 
     // GET /api/credits/transactions
     if (req.method === "GET" && parts[0] === "credits" && parts[1] === "transactions") {
       if (!user) return res.status(401).json({ detail: "Authentication required" });
-      return res.json(getTransactions(user.id));
+      return res.json(await getTransactions(user.id));
     }
 
     // GET /api/credits/tiers
@@ -106,25 +121,25 @@ module.exports = async function handler(req, res) {
     // POST /api/publish
     if (req.method === "POST" && parts[0] === "publish" && !parts[1]) {
       if (!user) return res.status(401).json({ detail: "Authentication required" });
-      const result = publishTimeline(user.id, req.body?.session_id, req.body?.title);
+      const result = await publishTimeline(user.id, req.body?.session_id, req.body?.title);
       return res.json(result);
     }
 
     // GET /api/published
     if (req.method === "GET" && parts[0] === "published" && !parts[1]) {
       if (!user) return res.status(401).json({ detail: "Authentication required" });
-      return res.json(listPublished(user.id));
+      return res.json(await listPublished(user.id));
     }
 
     // DELETE /api/published/:id
     if (req.method === "DELETE" && parts[0] === "published" && parts[1]) {
       if (!user) return res.status(401).json({ detail: "Authentication required" });
-      return res.json(unpublishTimeline(user.id, parts[1]));
+      return res.json(await unpublishTimeline(user.id, parts[1]));
     }
 
     // GET /api/p/:slug (public -- no auth)
     if (req.method === "GET" && parts[0] === "p" && parts[1]) {
-      const pub = getPublishedTimeline(parts[1]);
+      const pub = await getPublishedTimeline(parts[1]);
       if (!pub) return res.status(404).json({ detail: "Not found" });
       return res.json(pub);
     }
@@ -133,7 +148,7 @@ module.exports = async function handler(req, res) {
 
     // GET /api/export/:sessionId
     if (req.method === "GET" && parts[0] === "export" && parts[1]) {
-      const { yaml, filename } = exportYAML(parts[1], user?.id);
+      const { yaml, filename } = await exportYAML(parts[1], user?.id);
       res.setHeader("Content-Type", "text/yaml");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       return res.send(yaml);
@@ -143,28 +158,28 @@ module.exports = async function handler(req, res) {
 
     // GET /api/sessions
     if (req.method === "GET" && parts[0] === "sessions" && !parts[1]) {
-      return res.json(routes.listSessions(user?.id));
+      return res.json(await routes.listSessions(user?.id));
     }
 
     // POST /api/sessions
     if (req.method === "POST" && parts[0] === "sessions" && !parts[1]) {
-      const s = routes.createSession(req.body?.name, user?.id);
+      const s = await routes.createSession(req.body?.name, user?.id);
       return res.status(201).json(s);
     }
 
     // DELETE /api/sessions/:sid
     if (req.method === "DELETE" && parts[0] === "sessions" && parts[1] && !parts[2]) {
-      return res.json(routes.deleteSession(parts[1], user?.id));
+      return res.json(await routes.deleteSession(parts[1], user?.id));
     }
 
     // PUT /api/sessions/:sid
     if (req.method === "PUT" && parts[0] === "sessions" && parts[1] && !parts[2]) {
-      return res.json(routes.updateSession(parts[1], req.body?.name, user?.id));
+      return res.json(await routes.updateSession(parts[1], req.body?.name, user?.id));
     }
 
     // GET /api/sessions/:sid/timelines
     if (req.method === "GET" && parts[0] === "sessions" && parts[1] && parts[2] === "timelines") {
-      return res.json(routes.listTimelines(parts[1]));
+      return res.json(await routes.listTimelines(parts[1]));
     }
 
     // == Research ==
@@ -213,12 +228,12 @@ module.exports = async function handler(req, res) {
 
     // POST /api/unmerge
     if (req.method === "POST" && parts[0] === "unmerge") {
-      return res.json(routes.unmergeTl(req.body?.timeline_id));
+      return res.json(await routes.unmergeTl(req.body?.timeline_id));
     }
 
     // DELETE /api/timelines/:tid
     if (req.method === "DELETE" && parts[0] === "timelines" && parts[1]) {
-      return res.json(routes.deleteTimeline(parts[1]));
+      return res.json(await routes.deleteTimeline(parts[1]));
     }
 
     return res.status(404).json({ detail: "Not found" });
