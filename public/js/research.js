@@ -2,6 +2,8 @@
 
 import { S, API } from './state.js';
 import { reasoningPhase } from './dom.js';
+import { getToken } from './auth.js';
+import { updateCredits, showPricingModal } from './account.js';
 import {
   showReasoning, hideReasoning, appendToken,
   addEventPill, finalizeReasoning, reasoningError,
@@ -17,6 +19,9 @@ export async function doResearch(query) {
   showReasoning();
   const color = nextColor();
   const params = new URLSearchParams({ session_id: S.activeId, query, color });
+  // Include auth token as query param for SSE (EventSource doesn't support headers)
+  const token = getToken();
+  if (token) params.set("token", token);
   const es = new EventSource(`${API}/api/research/stream?${params}`);
 
   es.addEventListener("status", e => {
@@ -27,6 +32,11 @@ export async function doResearch(query) {
   es.addEventListener("intent", e => {
     const d = JSON.parse(e.data);
     setIntent(d.intent, d.summary);
+  });
+
+  es.addEventListener("credits", e => {
+    const d = JSON.parse(e.data);
+    updateCredits(d.balance);
   });
 
   es.addEventListener("search_progress", e => {
@@ -59,9 +69,25 @@ export async function doResearch(query) {
 
   es.addEventListener("error", e => {
     let msg = "Connection error";
-    try { if (e.data) { const d = JSON.parse(e.data); msg = d.message || msg; } } catch {}
+    let code = null;
+    try {
+      if (e.data) {
+        const d = JSON.parse(e.data);
+        msg = d.message || msg;
+        code = d.code;
+      }
+    } catch {}
     es.close();
-    reasoningError(msg);
+
+    if (code === "INSUFFICIENT_CREDITS") {
+      reasoningError(msg);
+      setTimeout(() => {
+        hideReasoning();
+        showPricingModal();
+      }, 1500);
+    } else {
+      reasoningError(msg);
+    }
   });
 
   es.addEventListener("done", () => { es.close(); });
