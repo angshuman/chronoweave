@@ -8,11 +8,14 @@ import {
   showReasoning, hideReasoning, appendToken,
   addEventPill, finalizeReasoning, reasoningError,
   reasoningConnectionLost, setIntent, addSearchProgress,
-  searchComplete,
+  searchComplete, showAnswer, showEditResult,
 } from './reasoning.js';
 import { loadTimelines } from './sessions.js';
 import { loadSessions } from './sessions.js';
 import { nextColor } from './state.js';
+import { renderView } from './render.js';
+import { setZoom, zoomIn, zoomOut } from './zoom.js';
+import { setMinImportance } from './density.js';
 
 export async function doResearch(query) {
   if (!query || !S.activeId) return;
@@ -59,12 +62,58 @@ export async function doResearch(query) {
     addEventPill(d.index, d.title);
   });
 
-  es.addEventListener("result", async () => {
+  // Handle client-side actions (navigate, display) — no LLM call needed
+  es.addEventListener("client_action", e => {
+    const d = JSON.parse(e.data);
     es.close();
-    finalizeReasoning();
-    await loadTimelines();
-    await loadSessions();
-    setTimeout(() => hideReasoning(), 800);
+
+    if (d.action === "navigate") {
+      if (d.zoomDirection === "in") zoomIn();
+      else if (d.zoomDirection === "out") zoomOut();
+      // TODO: scroll-to-year could be added here if views support it
+    } else if (d.action === "display") {
+      if (d.view) {
+        S.view = d.view;
+        document.querySelectorAll(".view-btn").forEach(b =>
+          b.classList.toggle("active", b.dataset.view === d.view)
+        );
+      }
+      if (d.minImportance !== undefined) setMinImportance(d.minImportance);
+      if (d.zoomDirection === "in") zoomIn();
+      else if (d.zoomDirection === "out") zoomOut();
+      if (d.view && d.minImportance === undefined) renderView();
+    }
+
+    setTimeout(() => hideReasoning(), 600);
+  });
+
+  // Handle question answers — display inline, no timeline reload
+  es.addEventListener("answer", e => {
+    const d = JSON.parse(e.data);
+    es.close();
+    showAnswer(d.text);
+    // auto-dismiss after a long delay so user can read
+    setTimeout(() => hideReasoning(), 12000);
+  });
+
+  es.addEventListener("result", async e => {
+    const d = JSON.parse(e.data);
+    es.close();
+
+    if (d.edited) {
+      // Edit result — reload timelines to reflect changes
+      showEditResult(d.removed, d.updated);
+      await loadTimelines();
+      await loadSessions();
+      renderView();
+      setTimeout(() => hideReasoning(), 2000);
+    } else {
+      // Normal research/refine result
+      finalizeReasoning();
+      await loadTimelines();
+      await loadSessions();
+      setTimeout(() => hideReasoning(), 800);
+    }
   });
 
   es.addEventListener("error", e => {

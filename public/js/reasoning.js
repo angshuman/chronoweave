@@ -119,14 +119,82 @@ export function setIntent(intent, summary) {
   const badge = document.createElement('div');
   badge.className = 'reasoning-intent';
 
-  const icon = intent === 'research'
-    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>'
-    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+  const icons = {
+    research: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>',
+    refine: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>',
+    navigate: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>',
+    display: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>',
+    question: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    edit: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+  };
+  const labels = {
+    research: 'New Research',
+    refine: 'Follow-up',
+    navigate: 'Navigate',
+    display: 'Display',
+    question: 'Question',
+    edit: 'Edit',
+  };
 
-  const label = intent === 'research' ? 'New Research' : 'Follow-up';
+  const icon = icons[intent] || icons.research;
+  const label = labels[intent] || 'Processing';
   badge.innerHTML = `${icon}<span class="ri-label">${label}</span><span class="ri-summary">${esc(summary)}</span>`;
   reasoningStream.appendChild(badge);
   reasoningBody.scrollTop = reasoningBody.scrollHeight;
+}
+
+/** Show a question answer in the reasoning panel */
+export function showAnswer(text) {
+  _streamPhase = 'done';
+  const analyzing = document.getElementById('reasoningAnalyzing');
+  if (analyzing) analyzing.remove();
+
+  const answer = document.createElement('div');
+  answer.className = 'reasoning-summary';
+  answer.style.cssText = 'flex-direction:column;align-items:flex-start;gap:8px;padding:12px';
+  answer.innerHTML = `
+    <div style="display:flex;align-items:center;gap:6px;opacity:0.7;font-size:11px">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Answer
+    </div>
+    <div style="font-size:13px;line-height:1.5">${esc(text)}</div>
+  `;
+  reasoningStream.appendChild(answer);
+  reasoningBody.scrollTop = reasoningBody.scrollHeight;
+
+  reasoningPulse.classList.add("done");
+  reasoningPhase.textContent = "Question answered";
+  reasoningTokens.textContent = "";
+  reasoningEventCount.textContent = "";
+}
+
+/** Show edit result confirmation in the reasoning panel */
+export function showEditResult(removed, updated) {
+  _streamPhase = 'done';
+  const analyzing = document.getElementById('reasoningAnalyzing');
+  if (analyzing) analyzing.remove();
+
+  let msg;
+  if (removed) msg = `Removed ${removed} event${removed !== 1 ? 's' : ''} from timeline`;
+  else if (updated) msg = `Updated ${updated} event${updated !== 1 ? 's' : ''}`;
+  else msg = 'Edit applied';
+
+  const summary = document.createElement('div');
+  summary.className = 'reasoning-summary';
+  summary.innerHTML = `
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M5 8.5L7 10.5L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>${esc(msg)}</span>
+  `;
+  reasoningStream.appendChild(summary);
+  reasoningBody.scrollTop = reasoningBody.scrollHeight;
+
+  reasoningPulse.classList.add("done");
+  reasoningPhase.textContent = msg;
+  reasoningTokens.textContent = "";
+  reasoningEventCount.textContent = "";
 }
 
 /** Add a search progress message (only shown when web search is triggered) */
