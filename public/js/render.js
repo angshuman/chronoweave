@@ -5,6 +5,7 @@ import { canvas } from './dom.js';
 import { renderListView } from './views/list.js';
 import { renderLinearView } from './views/vertical.js';
 import { renderHorizontalView } from './views/horizontal.js';
+import { autoImportanceThreshold } from './zoom.js';
 
 export function renderView() {
   canvas.innerHTML = "";
@@ -13,8 +14,11 @@ export function renderView() {
     return;
   }
   const allEvts = gatherEvents();
-  const filtered = S.minImportance > 0
-    ? allEvts.filter(e => (e.importance || 5) >= S.minImportance)
+  // Use the more restrictive of manual filter and auto zoom-based threshold
+  const autoThreshold = autoImportanceThreshold(S.zoom);
+  const effectiveMin = Math.max(S.minImportance, autoThreshold);
+  const filtered = effectiveMin > 0
+    ? allEvts.filter(e => (e.importance || 5) >= effectiveMin)
     : allEvts;
   const hiddenCount = allEvts.length - filtered.length;
 
