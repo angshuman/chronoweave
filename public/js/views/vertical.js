@@ -100,19 +100,48 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
     }
   }
 
-  // Year labels -- placed on the LEFT side of axis, prominent style
+  // Year labels -- placed on the LEFT side of axis, prominent style.
+  // Use adjusted (de-overlapped) event positions so labels align with
+  // where events actually render, not their raw temporal positions.
   const minYear = new Date(minTs).getFullYear();
   const maxYear = new Date(maxTs).getFullYear();
   const yearStep = getYearStep(maxYear - minYear, S.zoom);
   const majorStart = Math.floor(minYear / yearStep) * yearStep;
 
+  // Build a lookup: for each year boundary, find the adjusted Y position
+  // by interpolating between surrounding events.
+  function adjustedYForTs(ts) {
+    // Find the two items whose raw timestamps bracket this ts
+    // Items are sorted by raw y (which monotonically maps to _start)
+    if (!items.length) return yPos(ts);
+    // Before first event
+    if (ts <= items[0].evt._start) return items[0].adjustedY;
+    // After last event
+    if (ts >= items[items.length - 1].evt._start) return items[items.length - 1].adjustedY;
+    // Between events: find bracketing pair and interpolate
+    for (let i = 0; i < items.length - 1; i++) {
+      const tsA = items[i].evt._start;
+      const tsB = items[i + 1].evt._start;
+      if (ts >= tsA && ts <= tsB) {
+        const frac = (tsB === tsA) ? 0 : (ts - tsA) / (tsB - tsA);
+        return items[i].adjustedY + frac * (items[i + 1].adjustedY - items[i].adjustedY);
+      }
+    }
+    return items[items.length - 1].adjustedY;
+  }
+
+  // Minimum spacing between year labels to avoid overlap
+  const YEAR_LABEL_MIN_GAP = 28;
+  let lastYearLabelTop = -Infinity;
+
   for (let y = majorStart; y <= maxYear + yearStep; y += yearStep) {
     if (y < minYear || y > maxYear) continue;
     const ts = new Date(y, 0, 1).getTime();
     if (ts < minTs || ts > maxTs) continue;
-    const top = yPos(ts);
     const inGap = gaps.some(g => ts > g.startTs && ts < g.endTs);
     if (inGap) continue;
+
+    const top = adjustedYForTs(ts);
 
     // Check if this label would collide with a gap zone
     let skipLabel = false;
@@ -123,6 +152,10 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
       }
     }
     if (skipLabel) continue;
+
+    // Skip if too close to the previous year label
+    if (top - lastYearLabelTop < YEAR_LABEL_MIN_GAP) continue;
+    lastYearLabelTop = top;
 
     // Major: decade/century boundaries, first visible year, or large step sizes
     const isFirstLabel = (wrap.querySelectorAll('.linear-year-label').length === 0);
