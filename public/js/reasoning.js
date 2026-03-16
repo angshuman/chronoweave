@@ -107,6 +107,10 @@ export function showReasoning() {
   _parsedEvents = [];
   _streamPhase = 'init';
 
+  // Clear any existing suggestion pills
+  const pills = document.getElementById('suggestionPills');
+  if (pills) pills.remove();
+
   lucide.createIcons({ nodes: [reasoningOverlay] });
 }
 
@@ -352,6 +356,46 @@ export function reasoningConnectionLost() {
       reasoningOverlay.removeEventListener("click", dismiss);
     }
   });
+}
+
+/** Show follow-up suggestion pills below the query input */
+export function showSuggestions(suggestions, onSelect) {
+  // Remove any existing suggestions
+  const old = document.getElementById('suggestionPills');
+  if (old) old.remove();
+
+  if (!suggestions || !suggestions.length) return;
+
+  const wrap = document.createElement('div');
+  wrap.id = 'suggestionPills';
+  wrap.className = 'suggestion-pills';
+
+  suggestions.forEach((text, i) => {
+    const pill = document.createElement('button');
+    pill.className = 'suggestion-pill';
+    pill.style.animationDelay = `${i * 100}ms`;
+    pill.textContent = text;
+    pill.addEventListener('click', () => {
+      // Remove pills and trigger research
+      wrap.remove();
+      onSelect(text);
+    });
+    wrap.appendChild(pill);
+  });
+
+  // Insert after the query input bar
+  const queryBar = document.querySelector('.query-bar') || document.querySelector('#queryInput')?.parentElement;
+  if (queryBar && queryBar.parentElement) {
+    queryBar.parentElement.insertBefore(wrap, queryBar.nextSibling);
+  } else {
+    document.body.appendChild(wrap);
+  }
+}
+
+/** Clear suggestion pills (called when new research starts) */
+export function clearSuggestions() {
+  const el = document.getElementById('suggestionPills');
+  if (el) el.remove();
 }
 
 // Toggle binding

@@ -10,7 +10,7 @@ const { initDb } = require("../lib/db");
 const { authMiddleware, requireAuth, handleGoogleLogin, handleGetMe, GOOGLE_CLIENT_ID, verifyJwt, getUserById } = require("../lib/auth");
 const { TIERS, getBalance, getTransactions } = require("../lib/credits");
 const { createCheckoutSession, handleWebhook } = require("../lib/stripe");
-const { publishTimeline, getPublishedTimeline, listPublished, discoverTimelines, toggleLike, getLikeStatus, unpublishTimeline, exportYAML } = require("../lib/publish");
+const { publishTimeline, getPublishedTimeline, listPublished, discoverTimelines, toggleLike, getLikeStatus, unpublishTimeline, exportYAML, generatePreviewSVG } = require("../lib/publish");
 
 let _dbReady = false;
 
@@ -152,6 +152,16 @@ module.exports = async function handler(req, res) {
     // GET /api/like/:id (check like status)
     if (req.method === "GET" && parts[0] === "like" && parts[1]) {
       return res.json(await getLikeStatus(user?.id, parts[1]));
+    }
+
+    // GET /api/preview/:slug.svg (public -- preview card)
+    if (req.method === "GET" && parts[0] === "preview" && parts[1]) {
+      const slug = parts[1].replace(/\.svg$/, "");
+      const svg = await generatePreviewSVG(slug);
+      if (!svg) return res.status(404).json({ detail: "Not found" });
+      res.setHeader("Content-Type", "image/svg+xml");
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      return res.send(svg);
     }
 
     // GET /api/p/:slug (public -- no auth)

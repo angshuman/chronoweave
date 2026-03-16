@@ -96,6 +96,37 @@ function checkPaymentStatus() {
   }
 }
 
+// -- Featured Timelines on Landing ------------------------------------------
+async function loadFeatured() {
+  try {
+    const resp = await fetch('/api/discover?limit=6');
+    if (!resp.ok) return;
+    const { recent, most_liked } = await resp.json();
+    const items = (most_liked && most_liked.length > 0 ? most_liked : recent || []).slice(0, 6);
+    if (!items.length) return;
+    const grid = _$('#featuredGrid');
+    const section = _$('#featuredSection');
+    if (!grid || !section) return;
+    grid.innerHTML = items.map(item => {
+      const esc = s => { const el = document.createElement('span'); el.textContent = s || ''; return el.innerHTML; };
+      return `<a href="/p/${esc(item.slug)}" class="featured-card">
+        <div class="featured-card-thumb">
+          <img src="/api/preview/${esc(item.slug)}.svg" alt="" loading="lazy" onerror="this.parentElement.style.display='none'">
+        </div>
+        <div class="featured-card-body">
+          <div class="featured-card-title">${esc(item.title)}</div>
+          <div class="featured-card-meta">
+            <span>${item.event_count} events</span>
+            <span><i data-lucide="heart" style="width:10px;height:10px"></i> ${item.like_count || 0}</span>
+          </div>
+        </div>
+      </a>`;
+    }).join('');
+    section.classList.remove('hidden');
+    lucide.createIcons({ nodes: [grid] });
+  } catch {}
+}
+
 // -- Init -------------------------------------------------------------------
 initTheme();
 lucide.createIcons();
@@ -104,3 +135,4 @@ initAuth().then(() => {
   loadSessions();
   checkPaymentStatus();
 });
+loadFeatured();

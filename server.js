@@ -19,7 +19,7 @@ const { initDb } = require("./lib/db");
 const { authMiddleware, requireAuth, handleGoogleLogin, handleGetMe, GOOGLE_CLIENT_ID } = require("./lib/auth");
 const { TIERS, getBalance, getTransactions } = require("./lib/credits");
 const { createCheckoutSession, handleWebhook } = require("./lib/stripe");
-const { publishTimeline, getPublishedTimeline, listPublished, discoverTimelines, toggleLike, getLikeStatus, unpublishTimeline, exportYAML } = require("./lib/publish");
+const { publishTimeline, getPublishedTimeline, listPublished, discoverTimelines, toggleLike, getLikeStatus, unpublishTimeline, exportYAML, generatePreviewSVG } = require("./lib/publish");
 
 const PORT = parseInt(process.env.PORT || "8000", 10);
 const app = express();
@@ -260,6 +260,20 @@ app.post("/api/like/:id", requireAuth, async (req, res) => {
 app.get("/api/like/:id", async (req, res) => {
   try {
     res.json(await getLikeStatus(req.user?.id, req.params.id));
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
+});
+
+// -- Preview SVG (public -- no auth required) ------------------------------
+app.get("/api/preview/:slug.svg", async (req, res) => {
+  try {
+    const slug = req.params.slug;
+    const svg = await generatePreviewSVG(slug);
+    if (!svg) return res.status(404).json({ detail: "Not found" });
+    res.setHeader("Content-Type", "image/svg+xml");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.send(svg);
   } catch (err) {
     res.status(500).json({ detail: err.message });
   }

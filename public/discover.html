@@ -144,20 +144,25 @@
           : '';
         return `
           <a href="/p/${esc(item.slug)}" class="timeline-card">
-            <div class="tc-title">${esc(item.title)}</div>
-            <div class="tc-desc">${esc(item.description)}</div>
-            <div class="tc-badges">
-              <span class="tc-badge">${item.event_count} events</span>
-              ${item.timeline_count > 1 ? `<span class="tc-badge">${item.timeline_count} timelines</span>` : ''}
+            <div class="tc-thumb">
+              <img src="/api/preview/${esc(item.slug)}.svg" alt="" loading="lazy" onerror="this.parentElement.style.display='none'">
             </div>
-            <div class="tc-meta">
-              <div class="tc-author">
-                ${authorPic}
-                <span class="tc-author-name">${esc(item.author_name)}</span>
+            <div class="tc-body">
+              <div class="tc-title">${esc(item.title)}</div>
+              <div class="tc-desc">${esc(item.description)}</div>
+              <div class="tc-badges">
+                <span class="tc-badge">${item.event_count} events</span>
+                ${item.timeline_count > 1 ? `<span class="tc-badge">${item.timeline_count} timelines</span>` : ''}
               </div>
-              <span class="tc-stat"><i data-lucide="heart" style="width:12px;height:12px"></i> ${item.like_count || 0}</span>
-              <span class="tc-stat"><i data-lucide="eye" style="width:12px;height:12px"></i> ${item.view_count || 0}</span>
-              <span class="tc-stat">${date}</span>
+              <div class="tc-meta">
+                <div class="tc-author">
+                  ${authorPic}
+                  <span class="tc-author-name">${esc(item.author_name)}</span>
+                </div>
+                <span class="tc-stat"><i data-lucide="heart" style="width:12px;height:12px"></i> ${item.like_count || 0}</span>
+                <span class="tc-stat"><i data-lucide="eye" style="width:12px;height:12px"></i> ${item.view_count || 0}</span>
+                <span class="tc-stat">${date}</span>
+              </div>
             </div>
           </a>
         `;

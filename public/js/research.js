@@ -8,7 +8,7 @@ import {
   showReasoning, hideReasoning, appendToken,
   addEventPill, finalizeReasoning, reasoningError,
   reasoningConnectionLost, setIntent, addSearchProgress,
-  searchComplete, showAnswer, showEditResult,
+  searchComplete, showAnswer, showEditResult, showSuggestions,
 } from './reasoning.js';
 import { loadTimelines } from './sessions.js';
 import { loadSessions } from './sessions.js';
@@ -98,22 +98,31 @@ export async function doResearch(query) {
 
   es.addEventListener("result", async e => {
     const d = JSON.parse(e.data);
-    es.close();
 
     if (d.edited) {
       // Edit result — reload timelines to reflect changes
+      es.close();
       showEditResult(d.removed, d.updated);
       await loadTimelines();
       await loadSessions();
       renderView();
       setTimeout(() => hideReasoning(), 2000);
     } else {
-      // Normal research/refine result
+      // Normal research/refine result — keep ES open for suggestions
       finalizeReasoning();
       await loadTimelines();
       await loadSessions();
-      setTimeout(() => hideReasoning(), 800);
+      // Auto-close after timeout if no suggestions arrive
+      es._hideTimer = setTimeout(() => { es.close(); hideReasoning(); }, 4000);
     }
+  });
+
+  es.addEventListener("suggestions", e => {
+    const d = JSON.parse(e.data);
+    es.close();
+    if (es._hideTimer) clearTimeout(es._hideTimer);
+    showSuggestions(d.suggestions, doResearch);
+    setTimeout(() => hideReasoning(), 800);
   });
 
   es.addEventListener("error", e => {
