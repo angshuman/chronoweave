@@ -1,7 +1,7 @@
 /* ChronoWeave -- Research (SSE Streaming) */
 
 import { S, API } from './state.js';
-import { reasoningPhase } from './dom.js';
+import { reasoningPhase, topbarTitle } from './dom.js';
 import { getToken } from './auth.js';
 import { updateCredits, showPricingModal } from './account.js';
 import {
@@ -10,8 +10,7 @@ import {
   reasoningConnectionLost, setIntent, addSearchProgress,
   searchComplete, showAnswer, showEditResult, showSuggestions,
 } from './reasoning.js';
-import { loadTimelines } from './sessions.js';
-import { loadSessions } from './sessions.js';
+import { loadTimelines, loadSessions } from './sessions.js';
 import { nextColor } from './state.js';
 import { renderView } from './render.js';
 import { setZoom, zoomIn, zoomOut } from './zoom.js';
@@ -119,10 +118,18 @@ export async function doResearch(query) {
 
   es.addEventListener("suggestions", e => {
     const d = JSON.parse(e.data);
-    es.close();
     if (es._hideTimer) clearTimeout(es._hideTimer);
     showSuggestions(d.suggestions, doResearch);
     setTimeout(() => hideReasoning(), 800);
+  });
+
+  es.addEventListener("title_updated", e => {
+    const d = JSON.parse(e.data);
+    // Update topbar and sidebar with the new holistic title
+    topbarTitle.textContent = d.title;
+    const sess = S.sessions.find(s => s.id === S.activeId);
+    if (sess) sess.name = d.title;
+    loadSessions();
   });
 
   es.addEventListener("error", e => {
