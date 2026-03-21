@@ -3,7 +3,7 @@
 import { S } from '../state.js';
 import { canvasWrap } from '../dom.js';
 import { esc } from '../utils.js';
-import { parseDate, fmtDateRange, evtColor, impScale, getYearStep } from '../helpers.js';
+import { parseDate, fmtDateRange, evtColor, impScale, impTier, impDistanceFactor, getYearStep } from '../helpers.js';
 import { detectGaps, buildGapCroppedMapping } from '../gaps.js';
 import { openModal } from '../modal.js';
 
@@ -36,10 +36,7 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
   const containerW = canvasWrap.clientWidth - 40;
   // Axis at 35% to leave more room for right-side text
   const AXIS_X = Math.round(containerW * 0.28);
-  const CONN_LEN = 20;
   const TEXT_GAP = 6;
-  const RIGHT_W = Math.min(containerW - AXIS_X - CONN_LEN - TEXT_GAP - 16, 480);
-  const LEFT_W = Math.min(AXIS_X - CONN_LEN - TEXT_GAP - 16, 200);
 
   // Event card height estimate for de-overlap
   const CARD_H = 56;
@@ -202,16 +199,26 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
     wrap.appendChild(br);
   });
 
+  // Importance-based offset range from axis
+  const IMP_BASE_OFFSET = 8;    // minimum connector length (low importance)
+  const IMP_EXTRA_RANGE = 60;   // additional offset for critical importance
+
   // Render nodes
   items.forEach((item, i) => {
     const { evt, y, yEnd, imp, side, adjustedY } = item;
     const col = evtColor(evt);
     const sc = impScale(imp);
+    const tier = impTier(imp);
+    const impF = impDistanceFactor(imp);
     const isDuration = evt._end && evt._end !== evt._start;
-    const textW = RIGHT_W;
+
+    // Per-event connector length scales with importance
+    const evtConnLen = Math.round(IMP_BASE_OFFSET + impF * IMP_EXTRA_RANGE);
+    const evtTextLeft = AXIS_X + evtConnLen + TEXT_GAP;
+    const textW = Math.min(containerW - evtTextLeft - 16, 480);
 
     const node = document.createElement("div");
-    node.className = "tl-node";
+    node.className = "tl-node imp-" + tier;
     node.style.animationDelay = `${Math.min(i * 20, 400)}ms`;
 
     // Dot on axis — placed at adjustedY to stay aligned with the text card
@@ -235,16 +242,16 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
       node.appendChild(range);
     }
 
-    // Connector line from dot to text
+    // Connector line from dot to text — length scales with importance
     const conn = document.createElement("div");
     conn.className = "tl-conn";
     conn.style.background = col;
     conn.style.left = (AXIS_X + 2) + "px";
-    conn.style.width = CONN_LEN + "px";
+    conn.style.width = evtConnLen + "px";
     conn.style.top = adjustedY + "px";
     node.appendChild(conn);
 
-    // Text label
+    // Text label — positioned further from axis for important events
     const text = document.createElement("div");
     text.className = "tl-text";
     text.style.top = adjustedY + "px";
@@ -252,12 +259,18 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
     text.style.opacity = sc.opacity;
     text.style.width = Math.max(textW, 120) + "px";
     text.style.maxWidth = Math.max(textW, 120) + "px";
-    text.style.left = (AXIS_X + CONN_LEN + TEXT_GAP) + "px";
+    text.style.left = evtTextLeft + "px";
 
     const dateStr = fmtDateRange(evt);
+    const descHtml = tier === 'low'
+      ? ''
+      : `<div class="tl-sub"><span class="tl-date-inline">${dateStr}</span> ${esc(evt.description || "")}</div>`;
+    const dateOnly = tier === 'low'
+      ? `<div class="tl-sub"><span class="tl-date-inline">${dateStr}</span></div>`
+      : '';
     text.innerHTML = `
       <div class="tl-title" style="font-size:${sc.titleSize}px;font-weight:${sc.titleWeight}">${esc(evt.title)}</div>
-      <div class="tl-sub"><span class="tl-date-inline">${dateStr}</span> ${esc(evt.description || "")}</div>
+      ${dateOnly}${descHtml}
     `;
     node.appendChild(text);
 
@@ -267,7 +280,7 @@ export function renderLinearView(events, hiddenCount, allEvts, canvas) {
 
   const maxBottom = items.length ? Math.max(...items.map(it => it.adjustedY + CARD_H), ...items.map(it => it.yEnd + 20)) : 400;
   wrap.style.height = Math.max(400, maxBottom + 60) + "px";
-  wrap.style.minWidth = (AXIS_X + CONN_LEN + 200) + "px";
+  wrap.style.minWidth = (AXIS_X + IMP_BASE_OFFSET + IMP_EXTRA_RANGE + 200) + "px";
 
   canvas.appendChild(wrap);
 }

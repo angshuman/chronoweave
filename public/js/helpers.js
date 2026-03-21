@@ -102,6 +102,21 @@ export function impScale(imp) {
   };
 }
 
+// -- Importance tier classification -----------------------------------------
+
+export function impTier(imp) {
+  if (imp <= 3) return 'low';
+  if (imp <= 6) return 'med';
+  if (imp <= 8) return 'high';
+  return 'critical';
+}
+
+// Importance-based distance factor: 0.0 (low) to 1.0 (critical)
+export function impDistanceFactor(imp) {
+  const t = Math.max(0, Math.min(10, imp || 5));
+  return (t - 1) / 9; // 0..1
+}
+
 // -- Year step for axis labels ----------------------------------------------
 
 export function getYearStep(yearRange, zoom) {

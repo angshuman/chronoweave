@@ -2,7 +2,7 @@
 
 import { S } from '../state.js';
 import { esc } from '../utils.js';
-import { parseDate, fmtDateRange, evtColor, impScale, getYearStep } from '../helpers.js';
+import { parseDate, fmtDateRange, evtColor, impScale, impTier, impDistanceFactor, getYearStep } from '../helpers.js';
 import { detectGaps, buildGapCroppedMapping } from '../gaps.js';
 import { openModal } from '../modal.js';
 
@@ -118,6 +118,7 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
   const TIER_STEP = 54;
   const CONN_BASE = 30;
   const MAX_TIERS = 5;
+  const IMP_EXTRA_CONN = 40; // extra px for critical-importance events
 
   const tiersAbove = [];
   const tiersBelow = [];
@@ -170,10 +171,14 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
   const maxTierAbove = items.reduce((m, it) => it.side === "above" ? Math.max(m, it.tier) : m, 0);
   const maxTierBelow = items.reduce((m, it) => it.side === "below" ? Math.max(m, it.tier) : m, 0);
 
-  // Total height
-  const topSpace = CONN_BASE + (maxTierAbove + 1) * TIER_STEP + LABEL_H_EST + 16;
+  // Total height — include importance extra distance for tallest possible connector
+  const maxImpAbove = items.reduce((m, it) => it.side === "above" ? Math.max(m, it.imp) : m, 5);
+  const maxImpBelow = items.reduce((m, it) => it.side === "below" ? Math.max(m, it.imp) : m, 5);
+  const topImpExtra = Math.round(impDistanceFactor(maxImpAbove) * IMP_EXTRA_CONN);
+  const botImpExtra = Math.round(impDistanceFactor(maxImpBelow) * IMP_EXTRA_CONN);
+  const topSpace = CONN_BASE + (maxTierAbove + 1) * TIER_STEP + topImpExtra + LABEL_H_EST + 16;
   const yearLabelSpace = 30;
-  const botSpace = CONN_BASE + (maxTierBelow + 1) * TIER_STEP + LABEL_H_EST + 16;
+  const botSpace = CONN_BASE + (maxTierBelow + 1) * TIER_STEP + botImpExtra + LABEL_H_EST + 16;
   const totalH = topSpace + yearLabelSpace + botSpace;
   const axisY = topSpace;
 
@@ -249,9 +254,11 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     const { evt, x, imp, side, tier } = item;
     const col = evtColor(evt);
     const sc = impScale(imp);
+    const tierCls = impTier(imp);
+    const impF = impDistanceFactor(imp);
 
     const node = document.createElement("div");
-    node.className = "horiz-node";
+    node.className = "horiz-node imp-" + tierCls;
     node.style.animationDelay = `${Math.min(i * 15, 400)}ms`;
 
     // Dot on axis
@@ -264,8 +271,9 @@ export function renderHorizontalView(events, hiddenCount, allEvts, canvas) {
     dot.style.top = axisY + "px";
     node.appendChild(dot);
 
-    // Vertical connector — length based on tier
-    const connLen = CONN_BASE + tier * TIER_STEP;
+    // Vertical connector — length based on tier + importance distance
+    const impExtra = Math.round(impF * IMP_EXTRA_CONN);
+    const connLen = CONN_BASE + tier * TIER_STEP + impExtra;
     const vconn = document.createElement("div");
     vconn.className = "horiz-vconn";
     vconn.style.background = col;
